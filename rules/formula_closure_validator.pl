@@ -1,23 +1,12 @@
 % ============================================================
-% formula_closure_validator.pl — 配方闭合校验 + 品类约束
-% AquaFeedFormulator 核心规则模块 6/9
-% ============================================================
+% formula_closure_validator.pl — 配方闭合校验
+% AquaFeedFormulator
 %
 % 功能:
 %   1. 配方百分比闭合校验 (所有原料之和 = 100% ± 容差)
-%   2. 品类级用量上限校验 (淀粉类总和、动物蛋白下限等)
-%   3. 向 compliance_checker 输出 ClosureReport
+%   2. 品类级用量约束检查 (引用 category_rules.pl — 唯一源)
 %
-% 背景:
-%   ChatGPT 评审发现 AquaFeedFormulator v2 三个方案均不闭合:
-%   方案 A: 100.20%  |  方案 B: 97.40%  |  方案 C: 95.40%
-%   根因: formulation_solver.pl 只校验主料总和,未校验全配方闭合
-%
-% 谓词:
-%   validate_formula_closure(+Recipe, -ClosureReport)
-%   check_category_limits(+Species, +Stage, +Items, -CategoryViolations)
-%
-% 兼容性: scryper-prolog v0.10
+% ★ 品类约束规则统一在 category_rules.pl 定义，本文件只调用。
 % ============================================================
 
 % ==== scryper-prolog 兼容: 工具谓词 ====
@@ -120,96 +109,15 @@ check_single_category(Category, Items, LimitType, Limit,
     ).
 
 % ==========================================
-% 3. 品类定义与规则
+% 3. 品类映射 — 引用 category_rules.pl
 % ==========================================
-
-% ==== 品类: 淀粉类 (包括所有含高淀粉的原料) ====
-starch_ingredient(tapioca_starch).
-starch_ingredient(wheat_flour).
-starch_ingredient(wheat).
-starch_ingredient(corn).
-starch_ingredient(sorghum).
-starch_ingredient(wheat_middlings).
-
-% ==== 品类: 动物蛋白 ====
-animal_protein_ingredient(Id) :-
-    ingredient(Id, _, animal_protein, _, _, _, _, _, _, _, _).
-
-% ==== 品类: 植物蛋白 ====
-plant_protein_ingredient(Id) :-
-    ingredient(Id, _, plant_protein, _, _, _, _, _, _, _, _).
-
-% ==== 品类: 油脂类 ====
-oil_ingredient(Id) :-
-    ingredient(Id, _, oil, _, _, _, _, _, _, _, _).
-
-% ==== 品类: 磷源 ====
-phosphorus_ingredient(dicalcium_phosphate).
-phosphorus_ingredient(monocalcium_phosphate).
-
-% ==========================================
-% 4. 物种×阶段 品类约束规则
-% ==========================================
-
-% ---- 鳗鱼 (eel) ----
 %
-% 鳗鱼是典型肉食性鱼类, 对:
-% - 淀粉耐受性低 (消化系统对碳水化合物利用差)
-% - 动物蛋白需求高
-% - 诱食性要求高
-
-% 鳗鱼通用约束 (所有阶段)
-species_category_rule(japanese_eel, _, starch, max, 25.0,
-    '淀粉类总和超过25%: 鳗鱼对碳水化合物消化差, 高淀粉导致摄食率下降/FCR恶化/粪便散').
-
-species_category_rule(japanese_eel, _, animal_protein, min, 35.0,
-    '动物蛋白占比低于35%: 鳗鱼为肉食性, 动物蛋白不足影响生长和成活率').
-
-species_category_rule(japanese_eel, _, oil, max, 8.0,
-    '油脂总和超过8%: 高脂增加肝胆负担, 且可能氧化酸败').
-
-species_category_rule(japanese_eel, _, oil, min, 3.0,
-    '油脂总和低于3%: 鳗鱼饲料需足够能量密度, 脂肪不足影响蛋白效率').
-
-% 白仔鳗/玻璃鳗阶段 (开口期)
-species_category_rule(japanese_eel, glass_eel, starch, max, 18.0,
-    '白仔鳗淀粉应≤18%: 开口期消化系统发育不全, 高淀粉更敏感').
-
-species_category_rule(japanese_eel, glass_eel, animal_protein, min, 45.0,
-    '白仔鳗动物蛋白应≥45%: 开口期需高质量蛋白源保障成活率').
-
-% 黑仔鳗/幼鳗阶段
-species_category_rule(japanese_eel, juvenile, starch, max, 22.0,
-    '幼鳗淀粉应≤22%: 消化系统仍对高淀粉敏感').
-
-species_category_rule(japanese_eel, juvenile, animal_protein, min, 40.0,
-    '幼鳗动物蛋白应≥40%: 快速生长期需充足动物蛋白').
-
-% 养成鳗阶段
-species_category_rule(japanese_eel, grower, starch, max, 28.0,
-    '养成鳗淀粉应≤28%: 可适度增加碳水化合物, 但超过30%风险高(FCR可能从1.4升至1.8)').
-
-species_category_rule(japanese_eel, grower, animal_protein, min, 30.0,
-    '养成鳗动物蛋白应≥30%: 后期可适度增加植物蛋白替代').
-
-% ---- 虾类 (white_shrimp) ----
-species_category_rule(white_shrimp, _, starch, max, 20.0,
-    '虾料淀粉应≤20%: 虾对淀粉消化能力有限').
-
-species_category_rule(white_shrimp, _, animal_protein, min, 25.0,
-    '虾料动物蛋白应≥25%').
-
-% ---- 通用 (其他水产) ----
-species_category_rule(_, _, starch, max, 30.0,
-    '淀粉总和超过30%: 大部分水产动物碳水化合物利用有限, 注意FCR风险').
-
-species_category_rule(_, _, animal_protein, min, 20.0,
-    '动物蛋白占比低于20%: 多数经济水产动物需要一定量动物蛋白').
-
-% ==========================================
-% 5. 品类求和辅助函数
-% ==========================================
-
+% 以下谓词在 category_rules.pl 中定义，本文件直接复用：
+%   starch_ingredient/1, animal_protein_ingredient/1,
+%   plant_protein_ingredient/1, oil_ingredient/1,
+%   species_category_rule/6
+%
+% 品类求和辅助函数
 sum_category_percent(starch, Items, Total) :-
     findall(Pct, (
         member(item(Id, _, Pct, _), Items),
@@ -237,19 +145,6 @@ sum_category_percent(oil, Items, Total) :-
         oil_ingredient(Id)
     ), Pcts),
     sum_list(Pcts, Total).
-
-sum_category_percent(phosphorus, Items, TotalP) :-
-    % 磷源贡献的总磷百分比
-    findall(PContrib, (
-        member(item(Id, _, Pct, _), Items),
-        phosphorus_ingredient(Id),
-        (
-            Id == dicalcium_phosphate -> PContrib is Pct * 0.18
-            ; Id == monocalcium_phosphate -> PContrib is Pct * 0.22
-            ; PContrib = 0
-        )
-    ), PContribs),
-    sum_list(PContribs, TotalP).
 
 % ==========================================
 % 6. 修复建议生成

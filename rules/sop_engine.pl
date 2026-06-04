@@ -62,9 +62,9 @@ stage_name(_, '未知阶段').
 % ═══════════════════════════════════════════════════════════════
 
 solve_formulation(Species, Stage) :-
-    % P0-5: 生产模式校验（禁止静默 fallback）
+    % 生产模式校验（禁止静默 fallback — 缺规则就直接失败）
     (  can_execute(production, solve(Species, Stage)) -> true
-    ;  fail
+    ;  write('FATAL: 生产模式 can_execute 失败 — 禁止执行'), nl, fail
     ),
     % 营养目标
     species_nutrition(Species, Stage, TgtPro, TgtFat, MaxFib, MaxAsh),
@@ -79,16 +79,10 @@ solve_formulation(Species, Stage) :-
     ;  display_recipe(Solution, Species, Stage, TgtPro, TgtFat, MaxFib, MaxAsh)
     ).
 
-% 品类约束获取（含 fallback 控制）
+% 品类约束获取（从唯一源 category_rules.pl 读取，不重复定义）
 category_constraints_for(Species, Stage, Constraints) :-
-    species_category_constraints(Species, Stage, C1),
-    (  C1 \= [] -> Constraints = C1
-    ;  allow_fallback(_, true) ->
-       findall(Cat-LT-Limit,
-               fallback_category_rule(Cat, LT, Limit),
-               Constraints)
-    ;  Constraints = []  % 已在 can_execute 中失败，不会走到这里
-    ).
+    species_category_constraints_strict(Species, Stage, Constraints).
+
 
 % ═══════════════════════════════════════════════════════════════
 % 结果展示

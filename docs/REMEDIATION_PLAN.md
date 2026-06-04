@@ -1,28 +1,35 @@
 # AquaFeedFormulator 修正整改方案
 
-> 基于正式版评审报告 (2026-06-05) | 从 LP Solver → LLM + Prolog + Rust 总系统
+> 基于终审评审报告 (2026-06-05) | LLM + Prolog + Rust 水产饲料研发 SOP Agent 系统
 
 ---
 
-## 一、整改目标
+## 定位修正
 
-将 AquaFeedFormulator 从当前的 "Prolog LP 自动配方求解器" 升级为 "LLM + Prolog + Rust 水产饲料研发 SOP Agent 系统"。现有文档降级为 LP Solver 子模块文档，新增总系统架构，同步修复 P0/P1 问题。
+AquaFeedFormulator 不是「自动配方系统」，而是 **LLM + Prolog + Rust 三核协作的水产饲料研发 SOP Agent 系统**。
+LP Solver 只是 Prolog 层的一个子模块。
 
----
-
-## 二、优先级体系
-
-| 阶段 | 范围 | 目标 |
-|------|------|------|
-| **P0** | Prolog LP Solver 内部修复 | 规则源统一、成本正确、反例拦截、fallback安全 |
-| **P0.5** | 最小工程闭环 | Rust CLI → Prolog → JSON → 验收 |
-| **P1** | 完整系统 | LLM六Agent + Rust八Agent + 完整协议 |
+核心价值链路：
+```
+需求澄清 → 规则建模 → 配方求解(LP子模块) → 门禁校验 → 报告交付 → 复盘迭代
+```
 
 ---
 
-## 三、P0 修正任务（第一批）
+## 终审整改 10 项清单
 
-### P0-1：产品定义修正
+| # | 任务 | 状态 |
+|---|------|------|
+| 1 | 目标定位修正: 从「自动配方系统」→「LLM+Prolog+Rust SOP Agent」 | ✅ |
+| 2 | P0.5 工程闭环: `aqua solve --species X --stage Y --project Z` → 3 JSON | ✅ |
+| 3 | Prolog 状态门禁: 移除 TODO stub，Rust 注入 project_state fact | ✅ |
+| 4 | 禁止生产 fallback: `allow_fallback(production, false)` + 6 种阻断 | ✅ |
+| 5 | 统一唯一规则源: 清理 formula_closure_validator.pl 重复品类规则 | ✅ |
+| 6 | 成本口径修正: 区分 6 种成本，禁止「降本 40%」表述 | ✅ |
+| 7 | delivery_gatekeeper 交付入口: `deliverable/4` 7 道检查 | ✅ |
+| 8 | 反例测试自动化: 7 个反例可执行 `aqua test` | ✅ |
+| 9 | Self-Iteration 最小闭环: 只保留 cost_unit_anomaly 闭环 | ✅ |
+| 10 | 优先级重排: Rust-Prolog-JSON 第一，LLM Agent 放最后 | ✅ |
 
 | 项目 | 当前 | 修正后 |
 |------|------|--------|

@@ -153,6 +153,7 @@ reasonable_cost_range(grass_carp,        _,      3000, 6000).
 reasonable_cost_range(_,                 _,      3000, 30000).
 
 % 查询接口
+rule_approved_for(_, _, _).  % 默认 category_rules.pl 中所有规则视为 approved
 cost_in_range(Species, Stage, Cost) :-
     reasonable_cost_range(Species, Stage, Min, Max),
     Cost >= Min, Cost =< Max.

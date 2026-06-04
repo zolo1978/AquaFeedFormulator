@@ -1,33 +1,57 @@
 # AquaFeedFormulator 操作 SOP
 
-> 最后更新：2026-06-05 | scryer-prolog v0.10 | Prolog SOP v2.0 (P0+P0.5)
-> P0整改 + P0.5最小工程闭环：成本按物种细分、fallback加固、回滚条件、Rust CLI、JSON Schema
+> 最后更新：2026-06-05 | scryer-prolog v0.10 | 终审整改版
+>
+> Rust 执行 + Prolog 门禁 + JSON 结果 + 日志追溯 + 交付判断。
+> LP Solver 是子模块，LLM Agent 是后续。
 
 ---
 
 ## 系统定位
 
-AquaFeedFormulator 是 **LLM + Prolog + Rust** 三核协作的水产饲料研发 SOP Agent 系统。
+AquaFeedFormulator 是 **LLM + Prolog + Rust 三核协作的水产饲料研发 SOP Agent 系统**。
+**不是单纯的「自动配方求解器」。LP Solver 只是 Prolog 层的一个子模块。**
 
-- **Prolog LP Solver** 是自动配方求解子模块（详见 `docs/TECHNICAL_SPEC.md`）
-- **总系统架构** 见 `docs/TOTAL_SYSTEM_ARCHITECTURE.md`
-- **整改方案** 见 `docs/REMEDIATION_PLAN.md`
+| 层 | 职责 | 权限 |
+|---|------|------|
+| LLM | 需求理解、知识草案、结果解释 | 不可裁决，输出默认 draft |
+| Prolog | SOP主控、规则验证、交付门禁 | 决定能不能执行 |
+| Rust | 工程执行、状态管理、JSON输出 | 每步问 Prolog can_execute |
+| LP Solver | 约束满足 + 成本最小求解 | Prolog 子模块 |
 
 ---
 
 ## 系统概览
 
 ```
-                    ┌──────────────────────────────┐
-                    │  sop_engine.pl (总入口)        │
-                    │  solve_formulation/2           │
-                    └────────────┬─────────────────┘
-                                 │
-        ┌────────────────────────┼────────────────────────┐
-        │                        │                        │
-        ▼                        ▼                        ▼
-  sop_gatekeeper.pl       formulation_lp_engine.pl    category_rules.pl
-  (门禁/fallback)          (LP求解核心)                (唯一品类约束源)
+用户: aqua solve --species japanese_eel --stage adult --project production
+        │
+        ▼
+   Rust CLI: 注入 project_state → 调 scryer-prolog
+        │
+   ┌────▼────────────────────────────────────┐
+   │  Prolog SOP 主控                         │
+   │                                          │
+   │  1. can_execute(production, solve(...)) │  ← sop_gatekeeper
+   │  2. solve_formulation(Species, Stage)   │  ← sop_engine → LP
+   │  3. deliverable(Recipe, Spp, Stg, Dec)  │  ← delivery_gatekeeper
+   └────┬────────────────────────────────────┘
+        │
+        ▼
+   Rust CLI: validation_result.json
+              delivery_decision.json
+              execution_log.json
+```
+
+**核心命令**：
+```bash
+# 求解
+cargo run -- solve --species japanese_eel --stage adult --project production
+# 反例测试
+cargo run -- test
+# 门禁验证
+cargo run -- gate --project production
+```
         │                        │                        │
         ├── can_execute/2        ├── lp_solve/6           ├── species_category_rule/6
         ├── allow_fallback/2     ├── 整数缩放策略          ├── fallback_category_rule/3

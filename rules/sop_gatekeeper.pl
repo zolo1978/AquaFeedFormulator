@@ -1,21 +1,23 @@
 % ═══════════════════════════════════════════════════════════════
-% sop_gatekeeper.pl — SOP 门禁
-% AquaFeedFormulator P0-3 / P0-5
+% sop_gatekeeper.pl — SOP 门禁 v3.0
+% AquaFeedFormulator 终审整改
 %
 % 职责：
 %   1. can_execute/2 — 判定某动作是否允许执行
 %   2. allow_fallback/2 — 控制是否允许品类约束 fallback
 %   3. 物种/阶段存在性校验
+%
+% 核心原则：Rust 管状态，Prolog 管判断。
+%   每次调用 Prolog 前，Rust 注入 project_state/2 fact。
+%   Prolog 只做判定，不自己维护状态。
 % ═══════════════════════════════════════════════════════════════
 
 % ═══════════════════════════════════════════════════════════════
-% Fallback 控制 (P0-5 加固版)
+% Fallback 控制
 % ═══════════════════════════════════════════════════════════════
 
-% 默认生产模式，Project 级控制（不使用 _ 偷懒）
+% 生产模式 — 绝对禁止 fallback
 allow_fallback(production, false).
-% 显式开启 fallback（测试/开发项目）
-% allow_fallback(test_project_001, true).
 
 % 品类规则获取：三子句，带 Project 参数
 %   Clause 1: 精确匹配 → 直接返回
@@ -26,8 +28,8 @@ get_category_rule(Project, Species, Stage, Cat, LT, Limit) :-
 get_category_rule(Project, Species, Stage, Cat, LT, Limit) :-
     allow_fallback(Project, true),
     fallback_category_rule(Cat, LT, Limit), !.
-get_category_rule(Project, Species, Stage, Cat, LT, Limit) :-
-     allow_fallback(Project, true),
+get_category_rule(Project, Species, Stage, _Cat, _LT, _Limit) :-
+    allow_fallback(Project, false),
     write('ERROR: 无专用品类规则 — '),
     write(Species), write('/'), write(Stage), nl,
     write('  failed: species_category_rule_missing'), nl,
@@ -38,7 +40,7 @@ get_category_rule(Project, Species, Stage, Cat, LT, Limit) :-
 % 动作许可判定
 % ═══════════════════════════════════════════════════════════════
 
-% can_execute(+Project, +Action) — 判定是否允许执行
+% can_execute(+Project, +Action)
 %
 % Action 类型：
 %   solve(Species, Stage)         — 执行配方求解
@@ -48,6 +50,7 @@ get_category_rule(Project, Species, Stage, Cat, LT, Limit) :-
 %   modify_knowledge              — 修改知识库
 
 % --- solve 许可 ---
+% 生产模式必须通过全部校验
 can_execute(Project, solve(Species, Stage)) :-
     species_exists(Species),
     stage_exists(Species, Stage),
@@ -56,34 +59,41 @@ can_execute(Project, solve(Species, Stage)) :-
 
 % --- generate_report 许可 ---
 can_execute(Project, generate_report) :-
+    project_state(Project, State),
+    (  State = solved ; State = validated ; State = gated ),
     has_valid_solution(Project).
 
 % --- deliver 许可 ---
 can_execute(Project, deliver) :-
+    project_state(Project, State),
+    (  State = gated ; State = validated ),
     has_valid_solution(Project),
     delivery_gate_passed(Project).
 
 % --- activate_rule 许可 ---
 can_execute(Project, activate_rule(RuleId)) :-
+    project_state(Project, _),
     rule_status(RuleId, approved),
     counterexample_tests_passed(RuleId),
     rollback_available(RuleId).
 
 % --- modify_knowledge 许可 ---
 can_execute(Project, modify_knowledge) :-
+    project_state(Project, State),
+    State \= production,   % 生产模式下禁止直接修改知识库
     user_confirmed(Project, modify_knowledge).
 
 % ═══════════════════════════════════════════════════════════════
 % 校验子句
 % ═══════════════════════════════════════════════════════════════
 
-% 物种存在性校验
+% 物种存在性校验 — 确切存在才通过
 species_exists(Species) :-
     species_nutrition(Species, _, _, _, _, _), !.
 species_exists(Species) :-
     write('ERROR: 未知物种 — '), write(Species), nl, fail.
 
-% 阶段存在性校验
+% 阶段存在性校验 — 确切存在才通过
 stage_exists(Species, Stage) :-
     species_nutrition(Species, Stage, _, _, _, _), !.
 stage_exists(Species, Stage) :-
@@ -108,20 +118,50 @@ ingredients_available :-
 ingredients_available :-
     write('ERROR: 原料库为空'), nl, fail.
 
-% 占位子句（后续完善）
-has_valid_solution(_) :- true.  % TODO: 检查执行日志
-delivery_gate_passed(_) :- true.  % TODO: 检查交付门禁
-rule_status(_, approved) :- true.  % TODO: 检查 rule_version_registry
-counterexample_tests_passed(_) :- true.  % TODO: 调用 counterexample_tests
-rollback_available(_) :- true.  % TODO: 检查旧版本是否可回滚
-user_confirmed(_, _) :- true.  % TODO: 检查用户确认状态
+% ── 以下子句不再使用占位 TODO ──────────────────────────
+
+% has_valid_solution: Rust injects has_solution/1 fact
+has_valid_solution(Project) :-
+    has_solution(Project), !.
+has_valid_solution(Project) :-
+    write('ERROR: 项目 '), write(Project), write(' 无有效求解结果'), nl, fail.
+
+% delivery_gate_passed: Rust injects gate_passed/1 fact
+delivery_gate_passed(Project) :-
+    gate_passed(Project), !.
+delivery_gate_passed(Project) :-
+    write('ERROR: 项目 '), write(Project), write(' 交付门禁未通过'), nl, fail.
+
+% rule_status: Rust injects rule_status/2 fact
+rule_status(RuleId, Status) :-
+    rule_status_fact(RuleId, Status), !.
+rule_status(RuleId, _) :-
+    write('ERROR: 规则 '), write(RuleId), write(' 状态未知'), nl, fail.
+
+% counterexample_tests_passed: Rust injects tests_passed/1 fact
+counterexample_tests_passed(RuleId) :-
+    tests_passed(RuleId), !.
+counterexample_tests_passed(RuleId) :-
+    write('ERROR: 反例测试未通过: '), write(RuleId), nl, fail.
+
+% rollback_available: Rust injects rollback_available/1 fact
+rollback_available(RuleId) :-
+    rollback_available_fact(RuleId), !.
+rollback_available(RuleId) :-
+    write('ERROR: 无可回滚版本: '), write(RuleId), nl, fail.
+
+% user_confirmed: Rust injects user_confirmed/2 fact
+user_confirmed(Project, Action) :-
+    user_confirmed_fact(Project, Action), !.
+user_confirmed(Project, Action) :-
+    write('ERROR: 用户未确认 '), write(Action), write(' 于项目 '), write(Project), nl, fail.
 
 % ═══════════════════════════════════════════════════════════════
 % 成本异常检测 (P0-2+ 按物种细分)
 % ═══════════════════════════════════════════════════════════════
 
 cost_unit_anomaly(Species, Stage, CostPerTon) :-
-     cost_in_range(Species, Stage, CostPerTon),
+    \+ cost_in_range(Species, Stage, CostPerTon),
     reasonable_cost_range(Species, Stage, Low, High),
     write('WARNING: cost_unit_anomaly — '),
     write(Species), write('/'), write(Stage),
