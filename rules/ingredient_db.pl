@@ -14,6 +14,9 @@
 %   价格: 元/kg (2024-2025 市场参考价)
 %   用量: 占配方百分比范围
 %
+% 成本单位: price_unit(ingredient_id, yuan_per_kg).
+%   所有原料价格单位为 元/kg，吨成本 = Σ(Pct × Price) × 10
+%
 % 分类:
 %   1. 动物蛋白源 (fish_meal, blood_meal, meat_bone_meal, ...)
 %   2. 植物蛋白源 (soybean_meal, rapeseed_meal, cottonseed_meal, ...)
@@ -205,6 +208,15 @@ ingredient(mold_inhibitor, '防霉剂(丙酸钙)', additive,
 
 ingredient(phytase, '植酸酶', additive,
            0, 0, 0, 0, 0,        80.0, 0.05, 0.01).
+
+% ═══════════════════════════════════════════════════════════════
+% 成本单位声明 (P0-2)
+% ═══════════════════════════════════════════════════════════════
+
+% 所有原料价格单位为 元/kg
+% 吨成本 = Σ(配方百分比 × 元/kg) × 10
+% 合理成本区间: 3000 - 30000 元/吨
+price_unit(Id, yuan_per_kg) :- ingredient(Id, _, _, _, _, _, _, _, _, _, _).
 
 ingredient(betaine, '甜菜碱(诱食剂)', additive,
            0, 0, 0, 0, 0,        20.0, 0.5, 0).
