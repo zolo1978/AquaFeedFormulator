@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeliveryDecision",
+  "description": "配方求解后的交付门禁判定",
+  "type": "object",
+  "properties": {
+    "project_id": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "species": { "type": "string" },
+    "stage": { "type": "string" },
+    "deliverable": { "type": "boolean" },
+    "checks": {
+      "type": "object",
+      "properties": {
+        "closure": {
+          "type": "object",
+          "properties": {
+            "status": { "enum": ["pass", "fail", "skip"] },
+            "actual": { "type": "number" },
+            "expected": { "const": 100.0 },
+            "tolerance": { "const": 0.1 }
+          },
+          "required": ["status"]
+        },
+        "nutrition": {
+          "type": "object",
+          "properties": {
+            "status": { "enum": ["pass", "fail", "skip"] },
+            "protein": { "type": "object", "properties": { "target": {"type":"number"}, "actual": {"type":"number"} } },
+            "fat":     { "type": "object", "properties": { "target": {"type":"number"}, "actual": {"type":"number"} } },
+            "fiber":   { "type": "object", "properties": { "target": {"type":"number"}, "actual": {"type":"number"} } },
+            "ash":     { "type": "object", "properties": { "target": {"type":"number"}, "actual": {"type":"number"} } }
+          },
+          "required": ["status"]
+        },
+        "category": {
+          "type": "object",
+          "properties": {
+            "status": { "enum": ["pass", "fail", "skip"] }
+          },
+          "required": ["status"]
+        },
+        "cost_range": {
+          "type": "object",
+          "properties": {
+            "status": { "enum": ["pass", "fail", "skip"] },
+            "actual": { "type": "number" },
+            "species": { "type": "string" },
+            "min": { "type": "number" },
+            "max": { "type": "number" }
+          },
+          "required": ["status"]
+        },
+        "compliance": {
+          "type": "object",
+          "properties": {
+            "status": { "enum": ["pass", "fail", "skip"] }
+          }
+        },
+        "rule_approved": {
+          "type": "object",
+          "properties": {
+            "status": { "enum": ["pass", "fail", "skip"] }
+          }
+        },
+        "counterexample": {
+          "type": "object",
+          "properties": {
+            "status": { "enum": ["pass", "fail", "skip"] }
+          }
+        }
+      },
+      "required": ["closure", "nutrition", "category", "cost_range"]
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "check": { "type": "string" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "report_disclaimer": {
+      "type": "string",
+      "description": "强制声明：当前结果为模型约束下的可行方案，非养殖试验验证配方"
+    }
+  },
+  "required": ["project_id", "timestamp", "deliverable", "checks", "report_disclaimer"]
+}

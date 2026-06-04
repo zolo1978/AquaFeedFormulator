@@ -10,7 +10,17 @@
 
 ---
 
-## 二、P0 修正任务（本次必做）
+## 二、优先级体系
+
+| 阶段 | 范围 | 目标 |
+|------|------|------|
+| **P0** | Prolog LP Solver 内部修复 | 规则源统一、成本正确、反例拦截、fallback安全 |
+| **P0.5** | 最小工程闭环 | Rust CLI → Prolog → JSON → 验收 |
+| **P1** | 完整系统 | LLM六Agent + Rust八Agent + 完整协议 |
+
+---
+
+## 三、P0 修正任务（第一批）
 
 ### P0-1：产品定义修正
 
@@ -27,29 +37,35 @@
 
 ---
 
-### P0-2：成本单位修正
+### P0-2：成本单位修正 + 按物种细分
 
 **根因**：`sop_engine.pl` 中 `display_recipe` 的吨成本计算公式错误。
 
 ```prolog
 % ❌ 错误：多乘了 100
 TotalCostT is round(TotalCost * 100000) / 100.
-% Pct * Price 得出的是 元/100kg，吨 = 10 × 100kg，应乘 10
-% 实际：TotalCostT = TotalCost * 1000 （多了 100 倍）
 ```
 
 **修正**：
 ```prolog
-% ✅ 正确
+% ✅ 正确：TotalCost 单位为 元/100kg，吨 = ×10
 TotalCostT is TotalCost * 10.
 ```
 
-**验证**：鳗鱼成体吨成本从 ¥495,911 → ¥4,959（合理区间 ¥3,000-30,000）。
+**扩展（P0.2+）**：成本合理区间从全局 `[3000, 30000]` 细化为按物种/品类：
 
-**附加**：
-- `ingredient_db.pl` 头部注释明确：`Price` 字段单位为 `元/kg`
-- 新增成本异常检测规则：`cost_unit_anomaly` 当吨成本超出 [3000, 30000] 时触发
-- 新增 `price_unit/2` 事实
+```prolog
+reasonable_cost_range(japanese_eel,    _, 9000, 18000).
+reasonable_cost_range(white_shrimp,    _, 7000, 15000).
+reasonable_cost_range(common_carp,     _, 3500, 7000).
+reasonable_cost_range(grass_carp,      _, 3000, 6000).
+% ... 18 物种完整定义
+```
+
+**验证**：
+- 鳗鱼成体吨成本应在 ¥9,000-18,000
+- 草鱼成体吨成本应在 ¥3,000-6,000
+- 手算成本、Prolog 输出、报告展示三者一致
 
 ---
 
@@ -93,25 +109,27 @@ counterexample_tests       ─┘
 
 ---
 
-### P0-5：禁止生产模式静默 fallback
+### P0-5：禁止生产模式静默 fallback（加固版）
 
 **当前问题**：`species_category_rule(_, _, ...)` 通配规则自动兜底，物种名拼写错误不会报错。
 
-**修正**：
-- 新增 `allow_fallback(Project, false)` 默认禁止 fallback
-- 无专用规则时返回 `failed: species_category_rule_missing`
-- 仅 `allow_fallback(Project, true)` 时启用通用规则
+**加固方案**（不使用 `_` 偷懒）：
 
 ```prolog
-% sop_engine.pl 中新增
-allow_fallback(Project, false).  % 默认生产模式
-
-% 查询时：
-( species_category_rule(Species, Stage, Cat, LT, Limit, _) -> true
-; allow_fallback(_, true) -> species_category_rule(_, _, Cat, LT, Limit, _)
-; write('ERROR: 无专用品类规则'), fail
-).
+% 三子句，Project 级控制
+get_category_rule(Project, Species, Stage, Cat, LT, Limit) :-
+    specific_category_rule(Species, Stage, Cat, LT, Limit), !.
+get_category_rule(Project, Species, Stage, Cat, LT, Limit) :-
+    allow_fallback(Project, true),
+    fallback_category_rule(Cat, LT, Limit), !.
+get_category_rule(Project, Species, Stage, _Cat, _LT, _Limit) :-
+     allow_fallback(Project, true),
+    fail.   % 生产模式：无专用规则→失败
 ```
+
+**关键修正**：
+- `allow_fallback(production, false)` 而非 `allow_fallback(_, false)`
+- 所有规则查询带 `Project` 参数，杜绝跨项目规则污染
 
 ---
 
@@ -169,7 +187,29 @@ allow_fallback(Project, false).  % 默认生产模式
 
 ---
 
-## 三、P1 补充任务（后续迭代）
+## 五、P0.5 最小工程闭环
+
+### P0.5-1：Rust CLI 最小入口
+
+```bash
+aqua solve --species japanese_eel --stage adult --project project_001
+```
+
+调用链：Rust → `can_execute` → `solve_formulation` → `delivery_gatekeeper` → 写 JSON 日志。
+
+详见 `docs/IMPLEMENTATION_EXECUTION_PLAN.md`。
+
+### P0.5-2：最小 JSON 协议
+
+三个 JSON Schema：`validation_result.json`、`delivery_decision.json`、`execution_log.json`。
+
+### P0.5-3：成本按物种细分
+
+`reasonable_cost_range(Species, Stage, Min, Max)` 覆盖 18 物种。
+
+---
+
+## 六、P1 补充任务（后续迭代）
 
 ### P1-1：LLM 层设计
 
@@ -255,27 +295,29 @@ draft → validated → approved → active → archived → deprecated
 
 ---
 
-## 五、验收标准
+## 八、验收标准
 
 ### Prolog LP Solver 子模块
 
-- [x] 配方闭合 100% ± 0.1%
-- [x] 营养约束满足
-- [x] 品类约束满足
-- [ ] 成本单位正确（P0-2 修复后验证）
-- [x] 不可行解返回 infeasible
-- [ ] 规则来源无双副本（P0-4 修复后验证）
-- [ ] 反例测试可拦截异常输入（P0-6 完成后验证）
+| # | 验收项 | 当前状态 | 目标 |
+|---|-------|---------|------|
+| 1 | 配方闭合 100% ± 0.1% | ✅ 已具备 | 保持 |
+| 2 | 营养约束满足 | ✅ 已具备 | 保持 |
+| 3 | 品类约束满足 | ✅ 已具备 | 保持 |
+| 4 | 成本单位正确 | ⚠ 待验证 | 手算=输出=报告 |
+| 5 | 不可行解返回 infeasible | ✅ 已具备 | 保持 |
+| 6 | 规则源无双副本 | ⚠ 待验证 | 必须通过 |
+| 7 | 反例测试可拦截异常 | ⚠ 待运行 | 必须通过 |
+| 8 | 成本按物种验证 | ❌ 未实现 | P0.5 |
 
 ### 总系统
 
-- [ ] 需求完整性检查（Prolog 判断缺失字段）
-- [ ] requirement_snapshot 生成
-- [ ] LLM 输出默认 draft
-- [ ] 规则激活必须 approved
-- [ ] Rust 每步问 Prolog can_execute
-- [ ] 交付门禁 Prolog 判定
-- [ ] 复盘输出 iteration_patch_draft
-- [ ] 回归测试激活前必须通过
-- [ ] 日志审计可追踪
-- [ ] 回滚机制可用
+| # | 验收项 | 当前状态 | 目标 |
+|---|-------|---------|------|
+| 9 | can_execute 每步判定 | ⚠ 骨架 | P0.5 |
+| 10 | delivery_decision 输出 | ❌ 未实现 | P0.5 |
+| 11 | execution_log 可追踪 | ❌ 未实现 | P0.5 |
+| 12 | Rust CLI 调用 Prolog | ❌ 未实现 | P0.5 |
+| 13 | 复盘输出 patch_draft | ⚠ 骨架 | P0.7 |
+| 14 | 回滚机制 | ❌ 未实现 | P0.7 |
+| 15 | LLM 输出默认 draft | ❌ 未实现 | P1 |

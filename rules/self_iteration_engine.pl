@@ -125,6 +125,8 @@ iterate(unknown, Description, Patch) :-
 % patch_draft → patch_validated → patch_approved → patch_active
 %                                                       │
 %                                             old_rule → archived
+%
+% 回滚路径：patch_active → patch_rollback (恢复旧规则)
 
 % 推进状态
 advance_patch(Patch, NextStatus) :-
@@ -136,6 +138,91 @@ valid_transition(patch_validated, patch_approved).
 valid_transition(patch_approved, patch_active).
 valid_transition(patch_active, archived).
 valid_transition(archived, deprecated).
+valid_transition(patch_active, patch_rollback).   % ← 回滚路径
+valid_transition(patch_rollback, patch_draft).    % ← 修复后可重新进入
+
+% ═══════════════════════════════════════════════════════════════
+% 回滚条件 (P0-7 新增)
+% ═══════════════════════════════════════════════════════════════
+
+% 新规则导致原有正例失败 → 自动回滚
+must_rollback(Patch) :-
+    patch_status(Patch, patch_active),
+    regression_failed(Patch).
+
+% 专家撤销确认 → 回滚
+must_rollback(Patch) :-
+    patch_status(Patch, patch_active),
+    expert_revoked(Patch).
+
+% 关键输出异常 → 回滚
+must_rollback(Patch) :-
+    patch_status(Patch, patch_active),
+    critical_output_anomaly(Patch).
+
+% 补丁激活后成本校验失败 → 回滚
+must_rollback(Patch) :-
+    patch_status(Patch, patch_active),
+    cost_validation_failed(Patch).
+
+% 回滚执行
+execute_rollback(Patch) :-
+    patch_status(Patch, OldStatus),
+    write('[ROLLBACK] '), write(Patch), write(' '),
+    write(OldStatus), write(' -> patch_rollback'), nl,
+    retractall(patch_status(Patch, OldStatus)),
+    assertz(patch_status(Patch, patch_rollback)),
+    restore_previous_rule(Patch).
+
+% 推断占位子句（子 agent 实现）
+regression_failed(Patch) :-
+    write('[ITERATION] 检查回归测试: '), write(Patch), nl,
+    fail.  % TODO: 调用 counterexample_tests
+
+expert_revoked(Patch) :-
+    write('[ITERATION] 检查专家确认状态...'), nl,
+    fail.  % TODO: 检查 approval 记录
+
+critical_output_anomaly(Patch) :-
+    write('[ITERATION] 检查输出异常...'), nl,
+    fail.  % TODO: 成本/营养阈值检测
+
+cost_validation_failed(Patch) :-
+    write('[ITERATION] 成本校验失败...'), nl,
+    fail.
+
+restore_previous_rule(Patch) :-
+    write('[ITERATION] 从 rule_version_registry 恢复旧版规则...'), nl.
+    % TODO: 实现规则恢复
+
+% ═══════════════════════════════════════════════════════════════
+% 完整迭代流程
+% ═══════════════════════════════════════════════════════════════
+
+full_iteration_cycle(IssueType, Description) :-
+    write('[ITERATION] === 开始迭代周期 ==='), nl,
+    % 1. 归因
+    iterate(IssueType, Description, Patch),
+    write('[ITERATION] 归因完成: '), write(Patch), nl,
+    % 2. 一致性测试
+    (  rule_consistency_passed(Patch) ->
+        write('[ITERATION] 一致性测试: PASS'), nl,
+        advance_patch(Patch, patch_validated)
+    ;  write('[ITERATION] 一致性测试: FAIL'), nl, fail
+    ),
+    % 3. 回归测试
+    (  counterexample_regression_passed(Patch) ->
+        write('[ITERATION] 回归测试: PASS'), nl
+    ;  write('[ITERATION] 回归测试: FAIL'), nl, fail
+    ),
+    % 4. 等待确认
+    write('[ITERATION] 等待专家确认...'), nl,
+    % 5. 激活
+    (  can_activate_patch(Patch) ->
+        advance_patch(Patch, patch_active),
+        write('[ITERATION] 补丁已激活, 旧规则已归档, 可回滚'), nl
+    ;  write('[ITERATION] 激活条件不满足'), nl, fail
+    ).
 
 % ═══════════════════════════════════════════════════════════════
 % 激活门禁

@@ -17,7 +17,7 @@ deliverable(Recipe, Species, Stage, Decision) :-
     check_closure(Recipe, C1),
     check_nutrition(Recipe, Species, Stage, C2),
     check_category(Recipe, Species, Stage, C3),
-    check_cost_range(Recipe, C4),
+    check_cost_range(Recipe, Species, Stage, C4),
     (  C1 = passed, C2 = passed, C3 = passed, C4 = passed ->
         Decision = passed
     ;  findall(R,
@@ -62,10 +62,10 @@ check_category(recipe_sop(Items, _), Species, Stage, Result) :-
             Rules),
     check_all_category_rules(Items, Rules, Result).
 
-% 成本范围检查
-check_cost_range(recipe_sop(_, TotalCost), Result) :-
+% 成本范围检查（按物种）
+check_cost_range(recipe_sop(_, TotalCost), Species, Stage, Result) :-
     CostPerTon is round(TotalCost * 10),
-    (  cost_in_range(CostPerTon) ->
+    (  cost_in_range(Species, Stage, CostPerTon) ->
         Result = passed
     ;  Result = failed(cost_unit_anomaly, CostPerTon)
     ).

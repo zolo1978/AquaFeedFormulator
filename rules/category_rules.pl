@@ -99,6 +99,13 @@ species_category_constraints_fallback(Species, Stage, Constraints) :-
                Constraints)
     ).
 
+% 精确匹配（无通配兜底）
+specific_category_rule(Species, Stage, Cat, LT, Limit) :-
+    species_category_rule(Species, Stage, Cat, LT, Limit, _).
+specific_category_rule(Species, Stage, Cat, LT, Limit) :-
+    species_category_rule(Species, _, Cat, LT, Limit, _),
+     species_category_rule(Species, Stage, Cat, _, _, _).
+
 % 检查某品类约束是否存在
 has_category_rules(Species, Stage) :-
     species_category_rule(Species, Stage, _, _, _, _), !.
@@ -107,7 +114,56 @@ has_category_rules(Species, Stage) :-
 species_with_category_rules(SpeciesList) :-
     findall(Sp,
             ( species_category_rule(Sp, _, _, _, _, _),
-              Sp \= '_'  % 排除通配
+              Sp \= '_'
             ),
             Raw),
     sort(Raw, SpeciesList).
+
+% ═══════════════════════════════════════════════════════════════
+% 成本合理区间 — P0.2扩展：按物种细分
+% ═══════════════════════════════════════════════════════════════
+
+% 高价肉食性鱼类
+reasonable_cost_range(japanese_eel,      _,      9000, 18000).
+reasonable_cost_range(largemouth_bass,   _,      9000, 15000).
+reasonable_cost_range(snakehead,         _,      6000, 12000).
+reasonable_cost_range(atlanic_salmon,    _,      8000, 16000).
+reasonable_cost_range(rainbow_trout,     _,      7000, 14000).
+
+% 虾蟹类
+reasonable_cost_range(white_shrimp,      _,      7000, 15000).
+reasonable_cost_range(tiger_prawn,       _,      8000, 16000).
+reasonable_cost_range(giant_river_prawn, _,      6000, 12000).
+reasonable_cost_range(chinese_mitten_crab, _,    6000, 14000).
+
+% 中价杂食性鱼类
+reasonable_cost_range(common_carp,       _,      3500, 7000).
+reasonable_cost_range(crucian_carp,      _,      3500, 7000).
+reasonable_cost_range(black_carp,        _,      3500, 6500).
+reasonable_cost_range(wuchang_bream,     _,      3500, 6000).
+reasonable_cost_range(tilapia,           _,      3500, 6500).
+reasonable_cost_range(channel_catfish,   _,      3500, 6500).
+reasonable_cost_range(southern_catfish,  _,      4000, 7000).
+reasonable_cost_range(yellow_catfish,    _,      5000, 10000).
+
+% 低价草食性鱼类
+reasonable_cost_range(grass_carp,        _,      3000, 6000).
+
+% 通配兜底（仅 allow_fallback=true 时生效）
+reasonable_cost_range(_,                 _,      3000, 30000).
+
+% 查询接口
+cost_in_range(Species, Stage, Cost) :-
+    reasonable_cost_range(Species, Stage, Min, Max),
+    Cost >= Min, Cost =< Max.
+
+% 成本异常检测（按物种）
+cost_anomaly_check(Species, Stage, Cost) :-
+    (  cost_in_range(Species, Stage, Cost) -> true
+    ;  reasonable_cost_range(Species, Stage, Min, Max),
+       write('WARNING: cost_unit_anomaly — '),
+       write(Species), write('/'), write(Stage),
+       write(' 吨成本 ¥'), write(Cost),
+       write(' 超出合理区间 [¥'), write(Min), write(', ¥'), write(Max), write(']'), nl,
+       write('  请检查: Price 单位(元/kg)、吨成本计算公式、数据输入'), nl
+    ).

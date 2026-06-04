@@ -111,14 +111,15 @@ display_recipe(recipe_sop(Items, TotalCost),
     display_items(Items),
     sum_pcts(Items, TotalPct),
     TotalPctR is round(TotalPct * 10) / 10,
-    % P0-2 修正：吨成本 = TotalCost(元/100kg) × 10
+    % P0-2+ 修正：吨成本 = TotalCost(元/100kg) × 10
     TotalCostT is round(TotalCost * 10),
     write('  ---'), nl,
     write('  合计: '), write(TotalPctR), write('%'), nl,
     write('  吨成本: ¥'), write(TotalCostT), write(' /t'), nl,
-    % P0-2：成本异常检测
-    (  cost_in_range(TotalCostT) -> true
-    ;  write('  ⚠ cost_unit_anomaly: 吨成本超出合理区间'), nl
+    % P0-2+：成本异常检测（按物种）
+    (  cost_in_range(Species, Stage, TotalCostT) -> true
+    ;  write('  ⚠ cost_unit_anomaly: 吨成本超出 '),
+       write(Species), write(' 合理区间'), nl
     ),
     (  abs(TotalPctR - 100.0) =< 0.1 ->
         write('  闭合校验: OK'), nl

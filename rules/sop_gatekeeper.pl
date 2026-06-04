@@ -9,14 +9,30 @@
 % ═══════════════════════════════════════════════════════════════
 
 % ═══════════════════════════════════════════════════════════════
-% Fallback 控制 (P0-5)
+% Fallback 控制 (P0-5 加固版)
 % ═══════════════════════════════════════════════════════════════
 
-% 默认：生产模式，禁止 fallback
-allow_fallback(_, false).
+% 默认生产模式，Project 级控制（不使用 _ 偷懒）
+allow_fallback(production, false).
+% 显式开启 fallback（测试/开发项目）
+% allow_fallback(test_project_001, true).
 
-% 显式开启 fallback（测试/开发模式）
-% allow_fallback(test_project, true).
+% 品类规则获取：三子句，带 Project 参数
+%   Clause 1: 精确匹配 → 直接返回
+%   Clause 2: allow_fallback=true → 使用兜底规则
+%   Clause 3: allow_fallback=false → fail（生产模式阻断）
+get_category_rule(Project, Species, Stage, Cat, LT, Limit) :-
+    specific_category_rule(Species, Stage, Cat, LT, Limit), !.
+get_category_rule(Project, Species, Stage, Cat, LT, Limit) :-
+    allow_fallback(Project, true),
+    fallback_category_rule(Cat, LT, Limit), !.
+get_category_rule(Project, Species, Stage, Cat, LT, Limit) :-
+     allow_fallback(Project, true),
+    write('ERROR: 无专用品类规则 — '),
+    write(Species), write('/'), write(Stage), nl,
+    write('  failed: species_category_rule_missing'), nl,
+    write('  项目 '), write(Project), write(' 处于生产模式, 禁止静默 fallback'), nl,
+    fail.
 
 % ═══════════════════════════════════════════════════════════════
 % 动作许可判定
@@ -79,15 +95,12 @@ stage_exists(Species, Stage) :-
 
 % 品类规则检查（含 fallback 控制）
 has_category_rules_or_fallback(Project, Species, Stage) :-
-    has_category_rules(Species, Stage), !.
-has_category_rules_or_fallback(Project, Species, Stage) :-
-    allow_fallback(Project, true), !.
-has_category_rules_or_fallback(_, Species, Stage) :-
-    write('ERROR: 无专用品类规则 — '),
-    write(Species), write('/'), write(Stage), nl,
-    write('  failed: species_category_rule_missing'), nl,
-    write('  生产模式下禁止静默 fallback'), nl,
-    fail.
+    catch(get_category_rule(Project, Species, Stage, _, _, _), _, fail).
+
+% 成本范围检查（按物种）
+cost_in_range(Species, Stage, Cost) :-
+    reasonable_cost_range(Species, Stage, Min, Max),
+    Cost >= Min, Cost =< Max.
 
 % 原料可用性
 ingredients_available :-
@@ -104,21 +117,14 @@ rollback_available(_) :- true.  % TODO: 检查旧版本是否可回滚
 user_confirmed(_, _) :- true.  % TODO: 检查用户确认状态
 
 % ═══════════════════════════════════════════════════════════════
-% 成本异常检测 (P0-2)
+% 成本异常检测 (P0-2+ 按物种细分)
 % ═══════════════════════════════════════════════════════════════
 
-% 合理成本区间：3,000 - 30,000 元/吨
-reasonable_cost_range(3000, 30000).
-
-cost_in_range(CostPerTon) :-
-    reasonable_cost_range(Low, High),
-    CostPerTon >= Low,
-    CostPerTon =< High.
-
-cost_unit_anomaly(CostPerTon) :-
-    \+ cost_in_range(CostPerTon),
-    reasonable_cost_range(Low, High),
-    write('WARNING: cost_unit_anomaly — 吨成本 ¥'),
-    write(CostPerTon),
+cost_unit_anomaly(Species, Stage, CostPerTon) :-
+     cost_in_range(Species, Stage, CostPerTon),
+    reasonable_cost_range(Species, Stage, Low, High),
+    write('WARNING: cost_unit_anomaly — '),
+    write(Species), write('/'), write(Stage),
+    write(' 吨成本 ¥'), write(CostPerTon),
     write(' 超出合理区间 [¥'), write(Low), write(', ¥'), write(High), write(']'), nl,
     write('  请检查: Price 单位(元/kg)、吨成本计算公式、数据输入'), nl.

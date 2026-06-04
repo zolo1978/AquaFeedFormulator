@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExecutionLog",
+  "description": "每次配方求解的完整执行日志",
+  "type": "object",
+  "properties": {
+    "project_id": { "type": "string" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "exit_code": { "type": "integer" },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "seq": { "type": "integer", "description": "步骤序号" },
+          "action": { "type": "string", "description": "动作: can_execute | solve_formulation | delivery_gatekeeper | generate_report" },
+          "prolog_call": { "type": "string", "description": "实际调用的 Prolog 查询" },
+          "result": { "type": "string", "description": "结果: allow | block | solved | infeasible | passed | failed" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "error": { "type": "string", "description": "错误信息（如有）" }
+        },
+        "required": ["seq", "action", "result", "timestamp"]
+      }
+    },
+    "state_transitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "by": { "type": "string" }
+        }
+      }
+    }
+  },
+  "required": ["project_id", "steps"]
+}

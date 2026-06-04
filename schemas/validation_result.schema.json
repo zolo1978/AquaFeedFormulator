@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ValidationResult",
+  "description": "Prolog LP Solver 求解结果",
+  "type": "object",
+  "properties": {
+    "project_id": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "species": { "type": "string" },
+    "stage": { "type": "string" },
+    "solution": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": { "const": "solved" },
+            "recipe": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "ingredient_id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "pct": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "cost_per_ton": { "type": "number", "minimum": 0 }
+                },
+                "required": ["ingredient_id", "name", "pct", "cost_per_ton"]
+              }
+            },
+            "total_pct": { "type": "number" },
+            "total_cost_per_ton": { "type": "number", "minimum": 0 },
+            "closure_check": { "type": "boolean" },
+            "cost_anomaly": { "type": "boolean" },
+            "prolog_version": { "type": "string" },
+            "rules_version": { "type": "string" }
+          },
+          "required": ["status", "recipe", "total_pct", "total_cost_per_ton", "closure_check", "cost_anomaly"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": { "const": "infeasible" },
+            "reason": { "type": "string" }
+          },
+          "required": ["status", "reason"]
+        }
+      ]
+    },
+    "prolog_version": { "type": "string" },
+    "rules_version": { "type": "string" }
+  },
+  "required": ["project_id", "timestamp", "species", "stage", "solution"]
+}
