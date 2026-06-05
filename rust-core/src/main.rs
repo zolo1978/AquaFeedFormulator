@@ -168,23 +168,28 @@ fn solve(project: &str, species: &str, stage: &str) {
         seq: 2,
         action: "solve_formulation".into(),
         prolog_call: q2,
-        result: if ok2 && !out2.contains("infeasible") { "solved".into() } else { "infeasible".into() },
+        result: if ok2 && !out2.contains("infeasible") && !out2.contains("不可行") { "solved".into() } else { "infeasible".into() },
         timestamp: Utc::now().to_rfc3339(),
     });
 
-    if !ok2 || out2.contains("infeasible") {
+    if !ok2 || out2.contains("infeasible") || out2.contains("不可行") {
         let result = ValidationResult {
             project_id: project.to_string(),
             timestamp: Utc::now().to_rfc3339(),
             species: species.to_string(),
             stage: stage.to_string(),
             solution: SolutionResult::Infeasible {
-                reason: "营养目标与品类约束冲突".into(),
+                reason: "营养目标与品类约束冲突 — 将使用专家经验配方生成报告".into(),
             },
         };
         write_json("validation_result.json", &result);
-        eprintln!("[INFEASIBLE] 约束冲突，无法求解");
         write_execution_log(project, &steps, &started_at, 2);
+        eprintln!("[INFEASIBLE] LP 约束冲突 — 使用专家经验配方生成 DOCX 报告");
+        // 继续执行 DOCX 生成（使用内嵌配方数据）
+        generate_docx_report(species, stage);
+        // 复盘 + 自我迭代
+        generate_retrospective(species, stage, &steps, &started_at, false);
+        run_self_iteration(species, stage);
         return;
     }
     println!("  ✅ LP 求解完成");
@@ -253,16 +258,21 @@ fn solve(project: &str, species: &str, stage: &str) {
 
     println!();
     println!("═══════════════════════════════════════");
-    if deliverable {
-        println!("  交付判定: ✅ 通过");
-    } else {
-        println!("  交付判定: ❌ 未通过");
-    }
+    println!("  交付判定: {}", if deliverable { "✅ 通过" } else { "❌ 未通过" });
     println!("  输出文件:");
     println!("    generated/validation_result.json");
     println!("    generated/delivery_decision.json");
     println!("    generated/execution_log.json");
     println!("═══════════════════════════════════════");
+    
+    // ── Step 4: DOCX 报告生成 ────────────────────────────
+    generate_docx_report(species, stage);
+
+    // ── Step 5: 复盘报告 ─────────────────────────────────
+    generate_retrospective(species, stage, &steps, &started_at, deliverable);
+
+    // ── Step 6: 自我迭代 ─────────────────────────────────
+    run_self_iteration(species, stage);
 }
 
 fn write_execution_log(project: &str, steps: &[ExecutionStep], started_at: &chrono::DateTime<Utc>, exit_code: i32) {
@@ -274,6 +284,164 @@ fn write_execution_log(project: &str, steps: &[ExecutionStep], started_at: &chro
         steps: steps.to_vec(),
     };
     write_json("execution_log.json", &log);
+}
+
+/// 调用 Python 脚本生成 DOCX 配方报告
+fn generate_docx_report(_species: &str, _stage: &str) {
+    println!();
+    println!("[4/4] 生成 DOCX 配方报告...");
+    
+    let script = project_root().join("generate_report.py");
+    let json_path = project_root().join("generated/recipe_data.json");
+    
+    let json_arg = if json_path.exists() {
+        json_path.to_string_lossy().to_string()
+    } else {
+        String::from("__embedded__")
+    };
+    
+    let output = Command::new("python3")
+        .args([script.to_string_lossy().as_ref(), &json_arg])
+        .current_dir(project_root())
+        .output();
+    
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            if out.status.success() {
+                println!("{}", stdout);
+            } else {
+                eprintln!("⚠ DOCX 生成失败:");
+                eprintln!("{}", stderr);
+                eprintln!("{}", stdout);
+            }
+        }
+        Err(e) => {
+            eprintln!("⚠ 无法调用 Python3: {}", e);
+        }
+    }
+}
+
+/// 生成复盘报告 (Markdown + JSON)
+fn generate_retrospective(
+    species: &str,
+    stage: &str,
+    steps: &[ExecutionStep],
+    started_at: &chrono::DateTime<Utc>,
+    deliverable: bool,
+) {
+    let completed_at = Utc::now();
+    let duration = completed_at.signed_duration_since(*started_at);
+    let duration_ms = duration.num_milliseconds();
+    let total_steps = steps.len();
+    let passed_steps = steps.iter().filter(|s| {
+        s.result == "allow" || s.result == "solved" || s.result == "passed"
+    }).count();
+    let has_failures = passed_steps < total_steps;
+
+    let ts = completed_at.format("%Y%m%d-%H%M%S").to_string();
+    let report_path = project_root().join("generated").join(format!("retrospective_{}.md", ts));
+    let json_path = project_root().join("generated").join(format!("retrospective_{}.json", ts));
+
+    // ── Markdown 复盘报告 ──
+    let mut md = String::new();
+    md.push_str(&format!("# 🔄 复盘报告 — {species} {stage}\n\n", species=species, stage=stage));
+    md.push_str("| 项目 | 值 |\n|------|----|\n");
+    md.push_str(&format!("| 物种 | {} |\n", species));
+    md.push_str(&format!("| 阶段 | {} |\n", stage));
+    md.push_str(&format!("| 开始时间 | {} |\n", started_at.format("%Y-%m-%d %H:%M:%S")));
+    md.push_str(&format!("| 完成时间 | {} |\n", completed_at.format("%Y-%m-%d %H:%M:%S")));
+    md.push_str(&format!("| 耗时 | {:.1}s |\n", duration_ms as f64 / 1000.0));
+    md.push_str(&format!("| 交付判定 | {} |\n", if deliverable { "✅ 通过" } else { "❌ 未通过" }));
+    md.push_str(&format!("| 步骤通过率 | {}/{} |\n", passed_steps, total_steps));
+    md.push_str("\n");
+
+    md.push_str("## 步骤明细\n\n| # | 步骤 | 结果 |\n|---|------|------|\n");
+    for step in steps {
+        let icon = match step.result.as_str() {
+            "allow" | "solved" | "passed" => "✅",
+            _ => "❌",
+        };
+        md.push_str(&format!("| {} | {} | {} {} |\n", step.seq, step.action, icon, step.result));
+    }
+    md.push_str("\n");
+
+    let risk_level = if !deliverable { "🔴 高" } else if has_failures { "🟡 中" } else { "🟢 低" };
+    md.push_str(&format!("## 风险评估\n\n**风险等级**: {}\n\n", risk_level));
+    md.push_str("- 💡 LP 求解器当前使用 simplex，大数据量时可考虑切换到外部求解器\n");
+    md.push_str("- 💡 每隔 10 次迭代建议人工复核一次配方输出\n");
+    md.push_str("- 💡 氨基酸平衡未建模，后续迭代应引入 EAA 约束\n");
+    md.push_str("\n---\n*本报告由 AquaFeedFormulator 自动生成*\n");
+
+    fs::write(&report_path, &md).unwrap();
+    println!("[5/6] 复盘报告 → {}", report_path.display());
+
+    // ── JSON 复盘数据 ──
+    let retrospective = serde_json::json!({
+        "timestamp": completed_at.to_rfc3339(),
+        "species": species,
+        "stage": stage,
+        "duration_ms": duration_ms,
+        "deliverable": deliverable,
+        "risk_level": if !deliverable { "high" } else if has_failures { "medium" } else { "low" },
+        "steps_summary": { "total": total_steps, "passed": passed_steps },
+        "warnings": [
+            "当前 LP 解为大宗原料成本最小可行解",
+            "氨基酸平衡未建模",
+            "未经过养殖试验验证",
+        ],
+    });
+    fs::write(&json_path, serde_json::to_string_pretty(&retrospective).unwrap()).unwrap();
+    println!("[5/6] 复盘 JSON → {}", json_path.display());
+}
+
+/// 运行自我迭代引擎：异常检测 → patch_draft
+fn run_self_iteration(species: &str, stage: &str) {
+    println!("[6/6] 自我迭代引擎...");
+
+    let facts: Vec<&str> = vec![];
+    let query = format!(
+        "consult('rules/self_iteration_engine.pl'),\
+         cost_anomaly_iterate({species}, {stage}, 'solve_completed', _Patch).",
+        species = species, stage = stage
+    );
+    let out = run_prolog(&query, &facts);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+
+    if out.status.success() {
+        println!("  ✅ 迭代引擎运行完成");
+        for line in stdout.lines() {
+            let trimmed = line.trim();
+            if trimmed.contains("ITERATION") || trimmed.contains("patch") {
+                println!("  {}", trimmed);
+            }
+        }
+    } else {
+        eprintln!("  ⚠ 迭代引擎异常: {}", stderr);
+    }
+
+    // 生成 patch_draft JSON
+    let ts = Utc::now().format("%Y%m%d-%H%M%S").to_string();
+    let patch = serde_json::json!({
+        "timestamp": Utc::now().to_rfc3339(),
+        "species": species,
+        "stage": stage,
+        "trigger": "solve_completed",
+        "patches": [{
+            "id": format!("PATCH-{}", ts),
+            "root_cause": "自动复盘触发：检查成本单位/品类约束一致性",
+            "action_type": "rule_check",
+            "affected_files": ["sop_engine.pl", "category_rules.pl"],
+            "status": "patch_draft",
+        }],
+    });
+    let patch_path = project_root()
+        .join("generated")
+        .join(format!("patch_draft_{}.json", ts));
+    fs::write(&patch_path, serde_json::to_string_pretty(&patch).unwrap()).unwrap();
+    println!("  patch_draft → {}", patch_path.display());
 }
 
 // ═══════════════════════════════════════════════════════════════
