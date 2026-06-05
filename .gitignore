@@ -28,3 +28,9 @@ venv/
 *.docx
 *.pdf
 output/
+
+# Rust
+rust-core/target/
+
+# Generated outputs
+generated/
