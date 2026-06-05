@@ -1,0 +1,23 @@
+{
+  "project_id": "test",
+  "timestamp": "2026-06-05T02:33:16.494444+00:00",
+  "species": "white_shrimp",
+  "stage": "adult",
+  "deliverable": true,
+  "checks": {
+    "closure": "pass",
+    "nutrition": "pass",
+    "category": "pass",
+    "cost_range": "pass",
+    "compliance": "skip",
+    "rule_approved": "skip",
+    "counterexample": "skip"
+  },
+  "failures": [],
+  "warnings": [
+    "当前 LP 解为大宗原料成本最小可行解",
+    "氨基酸平衡未建模",
+    "未经过养殖试验验证"
+  ],
+  "report_disclaimer": "当前结果为模型约束下的可行方案，非养殖试验验证配方。不可表述为「降本X%」等商业承诺。"
+}

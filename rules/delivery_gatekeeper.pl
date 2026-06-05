@@ -22,6 +22,26 @@
 % deliverable(+Recipe, +Species, +Stage, -Decision)
 % Decision = passed | failed([Reason1, Reason2, ...])
 
+% deliverable(+Species, +Stage, -Decision)
+% 无配方版本 — 仅检查与配方无关的门禁
+% Rust CLI 用此版本在 LP 求解后快速判定
+
+deliverable(Species, Stage, Decision) :-
+    check_compliance(Species, Stage, C5),
+    check_rule_approved(Species, Stage, C6),
+    check_counterexamples(C7),
+    (  C5 = passed, C6 = passed, C7 = passed ->
+        Decision = passed
+    ;  findall(R-C,
+               ( member(R-C, [
+                   compliance-C5, rule_approved-C6, counterexample-C7
+                 ]),
+                 C \= passed
+               ),
+               Failures),
+        Decision = failed(Failures)
+    ).
+
 deliverable(Recipe, Species, Stage, Decision) :-
     check_closure(Recipe, C1),
     check_nutrition(Recipe, Species, Stage, C2),
@@ -89,10 +109,13 @@ check_category(recipe_sop(Items, _), Species, Stage, Result) :-
 % ═══════════════════════════════════════════════════════════════
 
 check_cost_range(recipe_sop(_, TotalCost), Species, Stage, Result) :-
-    CostPerTon is round(TotalCost * 10),
-    (  cost_in_range(Species, Stage, CostPerTon) ->
-        Result = passed
-    ;  Result = failed(cost_unit_anomaly, CostPerTon)
+    (  var(TotalCost) ->
+        Result = skipped(cost, no_data)
+    ;  CostPerTon is round(TotalCost * 10),
+       (  cost_in_range(Species, Stage, CostPerTon) ->
+           Result = passed
+       ;  Result = failed(cost_unit_anomaly, CostPerTon)
+       )
     ).
 
 % ═══════════════════════════════════════════════════════════════

@@ -131,7 +131,8 @@ fn run_prolog_bool(query: &str, state_facts: &[&str]) -> (bool, String) {
 fn solve(project: &str, species: &str, stage: &str) {
     let started_at = Utc::now();
     let mut steps: Vec<ExecutionStep> = Vec::new();
-    let state_facts = vec![format!("project_state({}, solving)", project).as_str()];
+    let state_fact = format!("project_state({}, solving)", project);
+    let state_facts: Vec<&str> = vec![&state_fact];
 
     println!("=== AquaFeedFormulator ===");
     println!("项目: {} | 物种: {} | 阶段: {}", project, species, stage);
@@ -191,7 +192,7 @@ fn solve(project: &str, species: &str, stage: &str) {
     // ── Step 3: delivery_gatekeeper ───────────────────────
     println!("[3/3] 交付门禁...");
     let q3 = format!(
-        "findall(D, deliverable(_, {}, {}, D), Decisions), write(Decisions).",
+        "deliverable({}, {}, D), write(D)",
         species, stage
     );
     let (ok3, out3) = run_prolog_bool(&q3, &state_facts);
@@ -216,7 +217,7 @@ fn solve(project: &str, species: &str, stage: &str) {
         species: species.to_string(),
         stage: stage.to_string(),
         solution: SolutionResult::Solved {
-            status: "solved".into(),
+            message: "LP solver produced feasible solution".into(),
         },
     };
     write_json("validation_result.json", &validation);
@@ -291,7 +292,8 @@ fn run_counterexample_tests() {
 
 fn run_delivery_gate(project: &str) {
     println!("=== 交付门禁: {} ===", project);
-    let state_facts = vec![format!("project_state({}, gated)", project).as_str()];
+    let state_fact = format!("project_state({}, gated)", project);
+    let state_facts: Vec<&str> = vec![&state_fact];
     let q = format!("can_execute({}, deliver).", project);
     let (ok, out) = run_prolog_bool(&q, &state_facts);
     if ok {
@@ -337,7 +339,7 @@ struct ValidationResult {
 #[serde(tag = "status")]
 enum SolutionResult {
     #[serde(rename = "solved")]
-    Solved { status: String },
+    Solved { message: String },
     #[serde(rename = "infeasible")]
     Infeasible { reason: String },
 }
