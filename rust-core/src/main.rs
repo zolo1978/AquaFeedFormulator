@@ -287,11 +287,15 @@ fn write_execution_log(project: &str, steps: &[ExecutionStep], started_at: &chro
 }
 
 /// 调用 Python 脚本生成 DOCX 配方报告
-fn generate_docx_report(_species: &str, _stage: &str) {
+fn generate_docx_report(species: &str, _stage: &str) {
     println!();
     println!("[4/4] 生成 DOCX 配方报告...");
     
-    let script = project_root().join("generate_report.py");
+    let script = if species == "japanese_eel" {
+        project_root().join("generate_eel_adult_report.py")
+    } else {
+        project_root().join("generate_report.py")
+    };
     let json_path = project_root().join("generated/recipe_data.json");
     
     let json_arg = if json_path.exists() {
@@ -300,10 +304,13 @@ fn generate_docx_report(_species: &str, _stage: &str) {
         String::from("__embedded__")
     };
     
-    let output = Command::new("python3")
-        .args([script.to_string_lossy().as_ref(), &json_arg])
-        .current_dir(project_root())
-        .output();
+    let mut command = Command::new("python3");
+    command.arg(script.to_string_lossy().as_ref());
+    // 鳗鱼报告不需要 json_arg，直接运行
+    if species != "japanese_eel" {
+        command.arg(&json_arg);
+    }
+    let output = command.current_dir(project_root()).output();
     
     match output {
         Ok(out) => {
