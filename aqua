@@ -1,0 +1,95 @@
+#!/bin/bash
+# AquaFeedFormulator 顶层入口脚本
+# 放在项目根目录，可直接 ./aqua solve --species japanese_eel --stage adult
+# 或 ln -s $(pwd)/aqua /usr/local/bin/aqua 全局调用
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RUST_DIR="$SCRIPT_DIR/rust-core"
+
+usage() {
+    echo "AquaFeedFormulator — 水产饲料配方 SOP Agent"
+    echo ""
+    echo "用法:"
+    echo "  ./aqua solve  --species <物种> --stage <阶段>   端到端求解"
+    echo "  ./aqua test                                      反例测试"
+    echo "  ./aqua gate   --project <项目名>                 交付门禁"
+    echo "  ./aqua prolog --species <物种> --stage <阶段>    纯 Prolog 求解"
+    echo "  ./aqua price                                     价格监控"
+    echo "  ./aqua report --species <物种>                   生成 DOCX 报告"
+    echo "  ./aqua build                                     编译 release 二进制"
+    echo ""
+    echo "示例:"
+    echo "  ./aqua solve --species japanese_eel --stage adult"
+    echo "  ./aqua solve --species white_shrimp --stage adult"
+    echo "  ./aqua prolog --species japanese_eel"
+    echo "  ./aqua test"
+}
+
+cmd="${1:-}"
+
+case "$cmd" in
+    solve)
+        shift
+        cd "$RUST_DIR" && exec cargo run -- solve "$@"
+        ;;
+    test)
+        cd "$RUST_DIR" && exec cargo run -- test
+        ;;
+    gate)
+        shift
+        cd "$RUST_DIR" && exec cargo run -- gate "$@"
+        ;;
+    prolog)
+        species="japanese_eel"
+        stage="adult"
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --species) species="$2"; shift 2 ;;
+                --stage)   stage="$2"; shift 2 ;;
+                *) shift ;;
+            esac
+        done
+        cd "$SCRIPT_DIR"
+        exec scryer-prolog -g "\
+            consult('rules/ingredient_db.pl'),\
+            consult('rules/species_nutrition.pl'),\
+            consult('rules/category_rules.pl'),\
+            consult('rules/sop_gatekeeper.pl'),\
+            consult('rules/formulation_lp_engine.pl'),\
+            consult('rules/delivery_gatekeeper.pl'),\
+            consult('rules/sop_engine.pl'),\
+            solve_formulation($species, $stage),\
+            halt."
+        ;;
+    price)
+        cd "$SCRIPT_DIR"
+        exec python3 scripts/price_monitor.py --json
+        ;;
+    report)
+        species="japanese_eel"
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --species) species="$2"; shift 2 ;;
+                *) shift ;;
+            esac
+        done
+        cd "$SCRIPT_DIR"
+        if [ "$species" = "japanese_eel" ] || [ "$species" = "eel" ]; then
+            exec python3 generate_eel_adult_report.py
+        else
+            exec python3 generate_report.py generated/recipe_data.json
+        fi
+        ;;
+    build)
+        cd "$RUST_DIR" && exec cargo build --release
+        ;;
+    help|--help|-h)
+        usage
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac
