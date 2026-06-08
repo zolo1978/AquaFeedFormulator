@@ -1,0 +1,112 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "language": "zh-CN",
+    "description": "M2 report_content_selector 文案码表 — Prolog 只输出 code，此处查表生成自然语言文案",
+    "updated": "2026-06-05"
+  },
+
+  "warnings": {
+    "eel_palability_oil_low": {
+      "severity": "medium",
+      "message": "鳗鱼饲料需关注诱食性，鱼油添加量不低于 3.0%。当前鱼油仅 {{fish_oil_pct}}%。",
+      "suggestion": "建议增加鱼油至 3% 以上，或补充鱿鱼膏/酵母提取物改善诱食效果。"
+    },
+    "eel_low_fishmeal_attractant_risk": {
+      "severity": "medium",
+      "message": "鳗鱼饲料鱼粉含量偏低（{{fishmeal_pct}}%），可能影响适口性和摄食率。",
+      "suggestion": "经济型方案中建议鱼粉不低于 5%，配合诱食剂（鱿鱼膏、酵母）使用。"
+    },
+    "shrimp_water_stability": {
+      "severity": "medium",
+      "message": "对虾饲料水中稳定性不足，谷朊粉仅 {{gluten_pct}}%，推荐不低于 0.5%。",
+      "suggestion": "添加谷朊粉 0.5-1.0%，或使用魔芋胶/海藻酸钠改善水中稳定性。"
+    },
+    "shrimp_cholesterol_low": {
+      "severity": "low",
+      "message": "对虾配方胆固醇含量偏低，可能影响蜕壳和生长。",
+      "suggestion": "建议补充胆固醇 0.1-0.2%，或增加动物蛋白原料比例。"
+    },
+    "carp_energy_excess": {
+      "severity": "low",
+      "message": "鲤鱼配方能量偏高（可消化能 {{de_kcal}} kcal/kg），可能导致腹腔脂肪沉积。",
+      "suggestion": "可适当降低油脂添加量或增加纤维来源。"
+    },
+    "general_ash_high": {
+      "severity": "low",
+      "message": "配方灰分 {{ash_pct}}% 偏高，可能为肉骨粉/矿物质过量。",
+      "suggestion": "检查钙磷添加剂用量，确保灰分不超过品类上限。"
+    },
+    "general_fiber_low": {
+      "severity": "info",
+      "message": "粗纤维含量偏低（{{fiber_pct}}%），不影响配方质量。",
+      "suggestion": ""
+    },
+    "general_lysine_gap": {
+      "severity": "high",
+      "message": "赖氨酸缺口 {{gap_pct}}%，配方氨基酸平衡不达标。",
+      "suggestion": "建议增加鱼粉/血粉比例，或补充晶体赖氨酸。"
+    },
+    "general_methionine_gap": {
+      "severity": "high",
+      "message": "蛋氨酸缺口 {{gap_pct}}%，需补充含硫氨基酸。",
+      "suggestion": "建议增加鱼粉比例或补充 DL-蛋氨酸。"
+    }
+  },
+
+  "suggestions": {
+    "carp_high_carb_ok": {
+      "severity": "info",
+      "message": "鲤科鱼类对碳水化合物利用能力强，可适当提高面粉/玉米比例降低配方成本。",
+      "suggestion": ""
+    },
+    "eel_high_protein_suggestion": {
+      "severity": "info",
+      "message": "鳗鱼成体粗蛋白维持在 44-46% 即可满足生长需求，过高反而增加氨氮排放。",
+      "suggestion": ""
+    },
+    "shrimp_freq_feeding_suggestion": {
+      "severity": "info",
+      "message": "对虾饲料一日投喂 3-4 次可提高饲料转化率，减少残饵浪费。",
+      "suggestion": ""
+    },
+    "general_cost_suggestion": {
+      "severity": "low",
+      "message": "当前配方成本 {{cost_per_ton}} 元/吨，处于品类合理区间，暂无进一步优化空间。",
+      "suggestion": ""
+    },
+    "general_attractant_suggestion": {
+      "severity": "low",
+      "message": "建议关注配方适口性，避免纯植物蛋白导致的采食量下降。",
+      "suggestion": "可添加鱿鱼膏 1-2% 或甜菜碱 0.1% 改善适口性。"
+    }
+  },
+
+  "substitution_risks": {
+    "palatability_risk": {
+      "severity": "medium",
+      "message": "替代原料适口性低于原原料，可能导致采食量下降。",
+      "suggestion": "配合诱食剂使用或限量替代（不超过 {{max_replace_pct}}%）。"
+    },
+    "eaa_gap_possible": {
+      "severity": "medium",
+      "message": "替代可能导致氨基酸平衡偏移，特别是蛋氨酸/赖氨酸可能出现缺口。",
+      "suggestion": "替代后建议运行 EAA 平衡检测。"
+    },
+    "ash_excess_risk": {
+      "severity": "medium",
+      "message": "替代原料灰分偏高，可能导致配方总灰分超标。",
+      "suggestion": "控制替代比例，确保灰分不超过品类上限。"
+    },
+    "antinutritional_factor": {
+      "severity": "medium",
+      "message": "替代原料含有抗营养因子（如棉酚、芥子苷），需限量使用。",
+      "suggestion": "严格限制替代比例，建议不超过 {{max_replace_pct}}%，或选用发酵/脱毒产品。"
+    },
+    "water_stability_risk": {
+      "severity": "low",
+      "message": "替代可能降低饲料水中稳定性。",
+      "suggestion": "补充粘结剂或谷朊粉。"
+    }
+  }
+}

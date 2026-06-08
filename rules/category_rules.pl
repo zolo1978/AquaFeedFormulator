@@ -26,10 +26,15 @@ plant_protein_ingredient(Id) :-
 oil_ingredient(Id) :-
     ingredient(Id, _, oil, _, _, _, _, _, _, _, _).
 
+fishmeal_ingredient(Id) :-
+    ingredient(Id, _, animal_protein, _, _, _, _, _, _, _, _),
+    sub_atom(Id, 0, _, _, 'fish_meal').
+
 category_check(starch, Id)         :- starch_ingredient(Id).
 category_check(animal_protein, Id) :- animal_protein_ingredient(Id).
 category_check(plant_protein, Id)  :- plant_protein_ingredient(Id).
 category_check(oil, Id)            :- oil_ingredient(Id).
+category_check(fishmeal, Id)       :- fishmeal_ingredient(Id).
 
 % ==== 品类约束规则 ==============================================
 % species_category_rule(Species, Stage, Category, LimitType, Limit%, Description)

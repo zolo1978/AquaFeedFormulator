@@ -62,6 +62,12 @@ stage_name(_, '未知阶段').
 % ═══════════════════════════════════════════════════════════════
 
 solve_formulation(Species, Stage) :-
+    solve_formulation_data(Species, Stage, Items, TotalCost, TgtPro, TgtFat, MaxFib, MaxAsh),
+    display_recipe(Items, TotalCost, Species, Stage, TgtPro, TgtFat, MaxFib, MaxAsh).
+
+% solve_formulation_data(+Species, +Stage, -Items, -TotalCost, -TgtPro, -TgtFat, -MaxFib, -MaxAsh)
+% 返回结构化数据，供编排器调用
+solve_formulation_data(Species, Stage, Items, TotalCost, TgtPro, TgtFat, MaxFib, MaxAsh) :-
     % 生产模式校验（禁止静默 fallback — 缺规则就直接失败）
     (  can_execute(production, solve(Species, Stage)) -> true
     ;  write('FATAL: 生产模式 can_execute 失败 — 禁止执行'), nl, fail
@@ -72,11 +78,11 @@ solve_formulation(Species, Stage) :-
     category_constraints_for(Species, Stage, CatConstraints),
     % LP求解（委托给 formulation_lp_engine.pl）
     lp_solve(TgtPro, TgtFat, MaxFib, MaxAsh, CatConstraints, Solution),
-    % 输出
+    % 提取数据
     (  Solution = infeasible ->
         write('=== 不可行 ==='), nl,
-        write('营养目标与品类约束冲突'), nl
-    ;  display_recipe(Solution, Species, Stage, TgtPro, TgtFat, MaxFib, MaxAsh)
+        write('营养目标与品类约束冲突'), nl, fail
+    ;  Solution = recipe_sop(Items, TotalCost)
     ).
 
 % 品类约束获取（从唯一源 category_rules.pl 读取，不重复定义）
@@ -88,8 +94,7 @@ category_constraints_for(Species, Stage, Constraints) :-
 % 结果展示
 % ═══════════════════════════════════════════════════════════════
 
-display_recipe(recipe_sop(Items, TotalCost),
-               Species, Stage, TgtPro, TgtFat, MaxFib, MaxAsh) :-
+display_recipe(Items, TotalCost, Species, Stage, TgtPro, TgtFat, MaxFib, MaxAsh) :-
     species_name(Species, SName),
     stage_name(Stage, StName),
     nl,

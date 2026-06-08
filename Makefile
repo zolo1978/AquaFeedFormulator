@@ -31,6 +31,7 @@ help:
 	@echo "  make build                               编译 Rust release 二进制"
 	@echo "  make clean                               清理构建产物"
 	@echo "  make price-monitor                       原料价格监控"
+	@echo "  make fetch-prices                        从爬虫获取最新市场价"
 	@echo "  make prolog-solve SPECIES=<物种>         纯 Prolog 求解 (跳过 Rust)"
 	@echo ""
 	@echo "示例:"
@@ -95,13 +96,19 @@ prolog-solve:
 
 # ── 价格监控 ────────────────────────────────────────────
 
+.PHONY: fetch-prices
+fetch-prices:
+	@echo "=== 爬虫喂价 → Formulator ==="
+	python3 scripts/feed_price_bridge.py --update-db
+	@echo "结果: generated/price_monitor/market_prices.json"
+
 .PHONY: price-monitor
-price-monitor:
+price-monitor: fetch-prices
 	@echo "=== 原料价格监控 ==="
 	python3 scripts/price_monitor.py --json
 	@echo "结果: generated/price_monitor/"
 
-# ── DOCX 报告 (独立调用) ────────────────────────────────
+# ── DOCX 报告 (Prolog 求解 → JSON → DOCX) ──────────────
 
 .PHONY: report
 report:
@@ -109,6 +116,6 @@ report:
 	@if [ "$(SPECIES)" = "japanese_eel" ]; then \
 		python3 generate_eel_adult_report.py; \
 	else \
-		python3 generate_report.py generated/recipe_data.json; \
+		ruby scripts/bridge_prolog_docx.rb $(SPECIES) $(STAGE); \
 	fi
 	@echo "报告: ~/Desktop/"

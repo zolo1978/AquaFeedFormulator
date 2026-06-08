@@ -11,7 +11,7 @@
 %
 % 谓词: ingredient(Name, Protein%, Fat%, Fiber%, Ash%, Moisture%, PriceYuanPerKg, MaxUsage%, MinUsage%)
 %   蛋白/脂肪/纤维/灰分: g/100g 干物质
-%   价格: 元/kg (2024-2025 市场参考价)
+%   价格: 元/kg (2026-06-08 市场价格，经价格监控校准)
 %   用量: 占配方百分比范围
 %
 % 成本单位: price_unit(ingredient_id, yuan_per_kg).
@@ -31,12 +31,10 @@
 % ==========================================
 
 % 鱼粉 — 秘鲁蒸汽鱼粉 (FAQ 65%)
-ingredient(fish_meal_peru_65, '秘鲁鱼粉(65%)', animal_protein,
-           65, 10, 1, 18, 8,     12.5, 50, 5).
+ingredient(fish_meal_peru_65, '秘鲁鱼粉(65%)', animal_protein, 65, 10, 1, 18, 8, 21.45, 50, 5).
 
 % 鱼粉 — 国产鱼粉 (FAQ 60%)
-ingredient(fish_meal_domestic_60, '国产鱼粉(60%)', animal_protein,
-           60, 9, 1.5, 20, 8,    9.5, 50, 5).
+ingredient(fish_meal_domestic_60, '国产鱼粉(60%)', animal_protein, 60, 9, 1.5, 20, 8, 9.00, 50, 5).
 
 % 鱼粉 — 白鱼粉 (FAQ 68%, 高端)
 ingredient(fish_meal_white_68, '白鱼粉(68%)', animal_protein,
@@ -47,12 +45,10 @@ ingredient(blood_meal_spray, '血粉(喷雾干燥)', animal_protein,
            80, 1, 1, 5, 8,       8.0, 8, 0).
 
 % 肉骨粉 (CP 50%)
-ingredient(meat_bone_meal_50, '肉骨粉(50%)', animal_protein,
-           50, 10, 3, 30, 8,     5.5, 15, 0).
+ingredient(meat_bone_meal_50, '肉骨粉(50%)', animal_protein, 50, 10, 3, 30, 8, 5.20, 15, 0).
 
 % 鸡肉粉
-ingredient(poultry_meal, '鸡肉粉', animal_protein,
-           62, 12, 1, 18, 8,     7.0, 15, 0).
+ingredient(poultry_meal, '鸡肉粉', animal_protein, 62, 12, 1, 18, 8, 9.8, 15, 0).
 
 % 虾壳粉
 ingredient(shrimp_shell_meal, '虾壳粉', animal_protein,
@@ -71,12 +67,11 @@ ingredient(silkworm_pupae_meal, '蚕蛹粉', animal_protein,
 % ==========================================
 
 % 豆粕 — 43% 蛋白
-ingredient(soybean_meal_43, '豆粕(43%)', plant_protein,
-           43, 1.5, 7, 6, 12,    4.2, 50, 0).
+ingredient(soybean_meal_43, '豆粕(43%)', plant_protein, 43, 1.5, 7, 6, 12, 3.90, 50, 0).
 
 % 豆粕 — 46% 蛋白 (高蛋白)
 ingredient(soybean_meal_46, '豆粕(46%)', plant_protein,
-           46, 1.5, 6, 6, 12,    4.6, 50, 0).
+           46, 1.5, 6, 6, 12,    4.30, 50, 0).
 
 % 发酵豆粕
 ingredient(fermented_soybean_meal, '发酵豆粕', plant_protein,
@@ -87,8 +82,7 @@ ingredient(rapeseed_meal_regular, '菜粕(普通)', plant_protein,
            36, 2, 12, 8, 12,     2.8, 30, 0).
 
 % 菜粕 (双低/Canola)
-ingredient(canola_meal, '双低菜粕', plant_protein,
-           38, 3, 10, 7, 12,     3.2, 35, 0).
+ingredient(canola_meal, '双低菜粕', plant_protein, 38, 3, 10, 7, 12, 2.41, 35, 0).
 
 % 棉粕 (普通)
 ingredient(cottonseed_meal_regular, '棉粕(普通)', plant_protein,
@@ -107,8 +101,7 @@ ingredient(corn_gluten_meal_60, '玉米蛋白粉(60%)', plant_protein,
            60, 2.5, 2, 3, 10,    5.8, 15, 0).
 
 % 玉米 DDGS (含可溶物干酒糟)
-ingredient(corn_ddgs, '玉米DDGS', plant_protein,
-           28, 10, 8, 5, 10,     2.5, 20, 0).
+ingredient(corn_ddgs, '玉米DDGS', plant_protein, 28, 10, 8, 5, 10, 2.13, 20, 0).
 
 % 大米蛋白粉
 ingredient(rice_protein_meal, '大米蛋白粉', plant_protein,
@@ -119,12 +112,10 @@ ingredient(rice_protein_meal, '大米蛋白粉', plant_protein,
 % ==========================================
 
 % 玉米
-ingredient(corn, '玉米', energy,
-           8.5, 3.5, 2, 1.5, 14, 2.4, 30, 0).
+ingredient(corn, '玉米', energy, 8.5, 3.5, 2, 1.5, 14, 2.31, 30, 0).
 
 % 小麦
-ingredient(wheat, '小麦', energy,
-           13, 2, 2, 2, 13,      2.6, 30, 0).
+ingredient(wheat, '小麦', energy, 13, 2, 2, 2, 13, 2.48, 30, 0).
 
 % 次粉 (小麦加工副产品)
 ingredient(wheat_middlings, '次粉', energy,
@@ -157,8 +148,7 @@ ingredient(sorghum, '高粱', energy,
 ingredient(fish_oil, '鱼油', oil,
            0, 99.5, 0, 0, 0,     15.0, 8, 1).
 
-ingredient(soybean_oil, '豆油', oil,
-           0, 99.5, 0, 0, 0,     10.0, 8, 1).
+ingredient(soybean_oil, '豆油', oil, 0, 99.5, 0, 0, 0, 8.53, 8, 1).
 
 ingredient(rapeseed_oil, '菜籽油', oil,
            0, 99.5, 0, 0, 0,     9.5, 8, 1).
@@ -170,8 +160,7 @@ ingredient(soybean_lecithin, '磷脂油', oil,
 % 5. 矿物质
 % ==========================================
 
-ingredient(dicalcium_phosphate, '磷酸氢钙', mineral,
-           0, 0, 0, 95, 3,       4.0, 4, 1).
+ingredient(dicalcium_phosphate, '磷酸氢钙', mineral, 0, 0, 0, 95, 3, 4.85, 4, 1).
 % Ca: ~23%, P: ~18%
 
 ingredient(limestone_powder, '石粉', mineral,
@@ -209,6 +198,13 @@ ingredient(mold_inhibitor, '防霉剂(丙酸钙)', additive,
 ingredient(phytase, '植酸酶', additive,
            0, 0, 0, 0, 0,        80.0, 0.05, 0.01).
 
+ingredient(betaine, '甜菜碱(诱食剂)', additive,
+           0, 0, 0, 0, 0,        20.0, 0.5, 0).
+
+ingredient(monocalcium_phosphate, '磷酸二氢钙', additive,
+           0, 0, 0, 95, 3,       5.0, 3, 0.5).
+% Ca: ~16%, P: ~22% — 水产首选磷源
+
 % ═══════════════════════════════════════════════════════════════
 % 成本单位声明 (P0-2)
 % ═══════════════════════════════════════════════════════════════
@@ -218,16 +214,9 @@ ingredient(phytase, '植酸酶', additive,
 % 合理成本区间: 3000 - 30000 元/吨
 price_unit(Id, yuan_per_kg) :- ingredient(Id, _, _, _, _, _, _, _, _, _, _).
 
-ingredient(betaine, '甜菜碱(诱食剂)', additive,
-           0, 0, 0, 0, 0,        20.0, 0.5, 0).
-
-ingredient(monocalcium_phosphate, '磷酸二氢钙', additive,
-           0, 0, 0, 95, 3,       5.0, 3, 0.5).
-% Ca: ~16%, P: ~22% — 水产首选磷源
-
-% ==========================================
+% ═══════════════════════════════════════════════════════════════
 % 实用查询函数
-% ==========================================
+% ═══════════════════════════════════════════════════════════════
 
 % 按分类列出原料
 ingredients_by_category(Category, IngredientList) :-
@@ -255,3 +244,66 @@ base_ingredient(Id) :-
 % 所有添加剂
 additive_ingredient(Id) :-
     ingredient(Id, _, additive, _, _, _, _, _, _, _, _).
+
+% ═══════════════════════════════════════════════════════════════
+% 原料矿物含量 (M5 mineral_balance 依赖)
+% ingredient_mineral(+Id, +Ca_g_per_100g, +TotalP_g_per_100g)
+% 数据来源: 中国饲料成分及营养价值表(第35版) + NRC 2011
+% ═══════════════════════════════════════════════════════════════
+
+% ==== 动物蛋白源 ====
+ingredient_mineral(fish_meal_peru_65,        3.80, 2.60).
+ingredient_mineral(fish_meal_domestic_60,    4.50, 2.80).
+ingredient_mineral(fish_meal_white_68,       5.20, 3.20).
+ingredient_mineral(blood_meal_spray,         0.30, 0.25).
+ingredient_mineral(meat_bone_meal_50,        8.50, 4.60).
+ingredient_mineral(poultry_meal,             4.80, 2.90).
+ingredient_mineral(shrimp_shell_meal,       10.20, 1.60).
+ingredient_mineral(squid_liver_paste,        0.15, 0.85).
+ingredient_mineral(silkworm_pupae_meal,      0.25, 0.70).
+
+% ==== 植物蛋白源 ====
+ingredient_mineral(soybean_meal_46,          0.32, 0.65).
+ingredient_mineral(soybean_meal_43,          0.31, 0.62).
+ingredient_mineral(fermented_soybean_meal,   0.35, 0.70).
+ingredient_mineral(rapeseed_meal_regular,    0.65, 1.02).
+ingredient_mineral(canola_meal,              0.65, 1.02).
+ingredient_mineral(cottonseed_meal_regular,  0.25, 0.90).
+ingredient_mineral(cottonseed_meal_dephenol, 0.25, 0.90).
+ingredient_mineral(peanut_meal,              0.25, 0.55).
+ingredient_mineral(corn_gluten_meal_60,      0.05, 0.45).
+ingredient_mineral(rice_protein_meal,        0.15, 0.40).
+
+% ==== 能量原料 ====
+ingredient_mineral(corn,                     0.02, 0.27).
+ingredient_mineral(wheat,                    0.05, 0.30).
+ingredient_mineral(wheat_flour,              0.06, 0.20).
+ingredient_mineral(wheat_middlings,          0.15, 0.90).
+ingredient_mineral(rice_bran_fullfat,        0.08, 1.30).
+ingredient_mineral(rice_bran_defatted,       0.10, 1.50).
+ingredient_mineral(corn_ddgs,                0.10, 0.80).
+ingredient_mineral(sorghum,                  0.04, 0.30).
+ingredient_mineral(tapioca_starch,           0.05, 0.10).
+
+% ==== 油脂类 (Ca/P ≈ 0) ====
+ingredient_mineral(fish_oil,                 0.00, 0.00).
+ingredient_mineral(soybean_oil,              0.00, 0.00).
+ingredient_mineral(rapeseed_oil,              0.00, 0.00).
+ingredient_mineral(soybean_lecithin,         0.00, 2.00).   % 磷脂含磷
+
+% ==== 矿物质 ====
+ingredient_mineral(dicalcium_phosphate,     23.0, 18.0).
+ingredient_mineral(monocalcium_phosphate,    16.0, 21.0).
+ingredient_mineral(limestone_powder,         38.0,  0.0).
+ingredient_mineral(salt,                      0.0,  0.0).
+ingredient_mineral(magnesium_sulfate,         0.0,  0.0).
+
+% ==== 添加剂 (微量, Ca/P ≈ 0) ====
+ingredient_mineral(premix_vitamin_aqua,       0.0,  0.0).
+ingredient_mineral(premix_mineral_aqua,       0.0,  0.0).
+ingredient_mineral(choline_chloride_50,       0.0,  0.0).
+ingredient_mineral(vitamin_c_phosphate,       0.0,  0.0).
+ingredient_mineral(phytase,                   0.0,  0.0).
+ingredient_mineral(betaine,                   0.0,  0.0).
+ingredient_mineral(antioxidant,               0.0,  0.0).
+ingredient_mineral(mold_inhibitor,            0.0,  0.0).

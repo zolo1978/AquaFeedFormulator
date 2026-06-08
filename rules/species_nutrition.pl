@@ -144,3 +144,54 @@ all_species(SpeciesList) :-
 valid_species_stage(Species, Stage) :-
     species_nutrition(Species, Stage, _, _, _, _),
     !.
+
+% ═══════════════════════════════════════════════════════════════
+% 物种矿物需求 (M5 mineral_balance 依赖)
+% species_mineral_requirement(+Species, +Stage,
+%     +AvailP_min_pct, +Ca_p_ratio_min, +Ca_p_ratio_max)
+%
+% AvailP_min_pct: 有效磷最低需求 (% 配方)
+% Ca_p_ratio_min/max: Ca/P 比值范围
+% 数据来源: NRC 2011 + GB/T 水生动物营养需要
+% ═══════════════════════════════════════════════════════════════
+
+species_mineral_requirement(japanese_eel,    adult, 0.60, 1.0, 1.5).
+species_mineral_requirement(white_shrimp,    adult, 0.80, 1.0, 1.8).
+species_mineral_requirement(common_carp,     adult, 0.55, 1.0, 2.0).
+species_mineral_requirement(grass_carp,      adult, 0.50, 1.0, 2.0).
+species_mineral_requirement(largemouth_bass, adult, 0.65, 1.0, 1.5).
+
+% ═══════════════════════════════════════════════════════════════
+% 物种必需氨基酸需求 (M6 eaa_balance 依赖)
+% species_amino_requirement(+Species, +Stage,
+%     +Lys%, +Met%, +MetCys%, +Thr%, +Trp%,
+%     +Arg%, +Ile%, +Leu%, +Val%, +His%, +Phe%)
+%
+% 所有数值: g/100g 日粮 (风干基础 / as-fed basis)
+% 数据来源: NRC 2011 + 各物种专项研究
+% ═══════════════════════════════════════════════════════════════
+
+% 鳗鲡/日本鳗 (Anguilla japonica) — 成体, 42% CP
+species_amino_requirement(japanese_eel, adult,
+    2.10, 0.90, 1.20, 1.60, 0.22,
+    1.70, 1.50, 2.70, 1.80, 0.80, 1.80).
+
+% 南美白对虾 (Litopenaeus vannamei) — 成体, 35% CP
+species_amino_requirement(white_shrimp, adult,
+    1.80, 0.70, 1.10, 1.40, 0.20,
+    1.80, 1.20, 1.80, 1.40, 0.60, 1.40).
+
+% 鲤鱼 (Cyprinus carpio) — 成体, 30% CP
+species_amino_requirement(common_carp, adult,
+    1.70, 0.60, 0.90, 1.20, 0.20,
+    1.30, 0.90, 1.70, 1.20, 0.60, 1.50).
+
+% 草鱼 (Ctenopharyngodon idella) — 成体, 28% CP
+species_amino_requirement(grass_carp, adult,
+    1.50, 0.50, 0.80, 1.05, 0.15,
+    1.20, 0.80, 1.50, 1.05, 0.50, 1.20).
+
+% 加州鲈 (Micropterus salmoides) — 成体, 42% CP
+species_amino_requirement(largemouth_bass, adult,
+    2.30, 1.10, 1.40, 1.80, 0.25,
+    2.00, 1.60, 3.00, 1.90, 0.90, 2.00).

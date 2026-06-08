@@ -1,0 +1,23 @@
+{
+  "white_shrimp": {
+    "adult": [
+      {"id": "premix_vitamin_aqua",  "pct": 0.50, "reason": "维生素预混料（含VA/D3/E/K3/B族）"},
+      {"id": "premix_mineral_aqua",  "pct": 0.50, "reason": "矿物质预混料（含铜/铁/锌/锰/碘/硒/钴）"},
+      {"id": "choline_chloride_50",  "pct": 0.30, "reason": "氯化胆碱50% — 脂肪代谢必需"},
+      {"id": "vitamin_c_phosphate",  "pct": 0.05, "reason": "VC磷酸酯 — 虾类抗应激/免疫"},
+      {"id": "betaine",              "pct": 0.30, "reason": "甜菜碱 — 诱食剂"},
+      {"id": "antioxidant",          "pct": 0.02, "reason": "乙氧基喹啉 — 抗氧化"},
+      {"id": "mold_inhibitor",       "pct": 0.05, "reason": "丙酸钙 — 防霉"}
+    ],
+    "juvenile": [
+      {"id": "premix_vitamin_aqua",  "pct": 0.50, "reason": "维生素预混料"},
+      {"id": "premix_mineral_aqua",  "pct": 0.50, "reason": "矿物质预混料"},
+      {"id": "choline_chloride_50",  "pct": 0.30, "reason": "氯化胆碱50%"},
+      {"id": "vitamin_c_phosphate",  "pct": 0.08, "reason": "VC磷酸酯（幼虾需求更高）"},
+      {"id": "betaine",              "pct": 0.30, "reason": "甜菜碱 — 诱食剂"},
+      {"id": "antioxidant",          "pct": 0.02, "reason": "乙氧基喹啉"},
+      {"id": "mold_inhibitor",       "pct": 0.05, "reason": "丙酸钙"}
+    ]
+  },
+  "_note": "微量添加剂用量基于行业标准推荐量，总计约1.7-1.8%，从大宗原料配料中同比例扣减"
+}

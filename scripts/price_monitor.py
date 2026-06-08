@@ -32,11 +32,14 @@ from typing import Optional
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = PROJECT_ROOT / "rules" / "ingredient_db.pl"
 OUTPUT_DIR = PROJECT_ROOT / "generated" / "price_monitor"
+BRIDGE_JSON = OUTPUT_DIR / "market_prices.json"
 ALERT_THRESHOLD = 0.15  # 15% 偏差触发告警
 
-# 原料 → 市场参考价 (2025Q2 基准, 定期从网站更新)
-# 格式: {ingredient_id: (market_price_yuan_per_kg, source)}
-MARKET_PRICES = {
+# ─── 价格源加载 ──────────────────────────────────────
+
+# 优先从 feed_price_bridge.py 输出加载实时爬虫价格
+# 回退: 硬编码基准价格 (2025Q2)
+DEFAULT_MARKET_PRICES = {
     # ── 动物蛋白源 ──
     "fish_meal_peru_65":       (12.0, "feedonline.cn 秘鲁CNF"),
     "fish_meal_domestic_60":   (9.0,  "feedonline.cn 国产"),
@@ -96,6 +99,30 @@ MARKET_PRICES = {
 }
 
 
+def load_market_prices() -> dict:
+    """
+    加载市场参考价格。
+    优先: market_prices.json (feed_price_bridge.py 输出，实时爬虫数据)
+    回退: DEFAULT_MARKET_PRICES (硬编码基准)
+    策略: 合并 — 实时数据覆盖同ID，其余用默认值
+    返回: {ingredient_id: (price_yuan_per_kg, source_label)}
+    """
+    prices = dict(DEFAULT_MARKET_PRICES)  # 默认全覆盖
+
+    if BRIDGE_JSON.exists():
+        try:
+            with open(BRIDGE_JSON) as f:
+                data = json.load(f)
+            for ing_id, info in data.get("prices", {}).items():
+                prices[ing_id] = (info["price_yuan_per_kg"], info["source"])
+            if data.get("prices"):
+                src_date = data.get("generated_at", "unknown")
+        except (json.JSONDecodeError, KeyError, IOError):
+            pass
+
+    return prices
+
+
 # ─── 数据库解析 ──────────────────────────────────────
 
 def parse_ingredient_db(path: Path) -> dict:
@@ -126,11 +153,11 @@ def parse_ingredient_db(path: Path) -> dict:
 
 # ─── 偏差计算 ────────────────────────────────────────
 
-def check_deviations(db_ingredients: dict) -> list[dict]:
+def check_deviations(db_ingredients: dict, market_prices: dict) -> list[dict]:
     """对比数据库价格 vs 市场价, 返回告警列表"""
     alerts = []
 
-    for ing_id, (market_price, source) in MARKET_PRICES.items():
+    for ing_id, (market_price, source) in market_prices.items():
         if ing_id not in db_ingredients:
             alerts.append({
                 "ingredient_id": ing_id,
@@ -161,10 +188,10 @@ def check_deviations(db_ingredients: dict) -> list[dict]:
 
 # ─── 完整报告 ────────────────────────────────────────
 
-def generate_report(db_ingredients: dict, alerts: list[dict]) -> dict:
+def generate_report(db_ingredients: dict, alerts: list[dict], market_prices: dict) -> dict:
     """生成完整监控报告"""
     results = []
-    for ing_id, (market_price, source) in MARKET_PRICES.items():
+    for ing_id, (market_price, source) in market_prices.items():
         if ing_id not in db_ingredients:
             continue
         name, db_price = db_ingredients[ing_id]
@@ -252,9 +279,11 @@ def main():
         print(f"❌ 数据库文件不存在: {DB_PATH}")
         sys.exit(1)
 
+    market_prices = load_market_prices()
+
     db_ingredients = parse_ingredient_db(DB_PATH)
-    alerts = check_deviations(db_ingredients)
-    report = generate_report(db_ingredients, alerts)
+    alerts = check_deviations(db_ingredients, market_prices)
+    report = generate_report(db_ingredients, alerts, market_prices)
 
     # ── 输出 ──
     if args.alert_only:

@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
-AquaFeedFormulator — DOCX 配方报告生成器
-用法: python3 generate_report.py <json_file>
-输入: recipe_data.json (由 Rust CLI 生成)
+AquaFeedFormulator — DOCX 配方报告生成器 v2.1
+输入: recipe_data.json (由 bridge_prolog_docx.rb 生成)
 输出: Desktop/南美白对虾成体饲料配方报告.docx
 """
 
 import json, sys, os
 from datetime import datetime
-from pathlib import Path
 
 def main():
     if len(sys.argv) < 2:
@@ -17,7 +15,6 @@ def main():
     
     json_path = sys.argv[1]
     if not os.path.exists(json_path):
-        # 如果 JSON 不存在，从脚本内嵌数据生成
         data = get_embedded_data()
         print("⚠ JSON 文件不存在，使用内嵌配方数据")
     else:
@@ -48,10 +45,13 @@ def generate_docx(data):
         section.left_margin = Cm(2.5)
         section.right_margin = Cm(2.5)
     
-    species = data['species']
-    stage = data['stage']
-    nutrition = data['nutrition']
-    plans = data['plans']
+    meta = data.get('meta', {})
+    species = meta.get('species', '南美白对虾')
+    stage = meta.get('stage', '成体')
+    species_desc = meta.get('species_desc', f'{species} (Litopenaeus vannamei) 是全球养殖产量最高的对虾品种。')
+    nutrition = data.get('nutrition', {})
+    plans = data.get('plans', [])
+    constraints = data.get('constraints', [])
     
     # ── 封面 ──
     doc.add_paragraph()
@@ -72,36 +72,31 @@ def generate_docx(data):
     doc.add_paragraph()
     info = doc.add_paragraph()
     info.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    info.add_run(f'生成日期: {datetime.now().strftime("%Y-%m-%d %H:%M")}\n').font.size = Pt(10)
-    info.add_run('引擎: AquaFeedFormulator v2 + PrologAgentTeam\n').font.size = Pt(10)
-    info.add_run('校验: SOP Gatekeeper + Delivery Gatekeeper').font.size = Pt(10)
+    info.add_run(f'生成日期: {meta.get("generated_at", datetime.now().strftime("%Y-%m-%d %H:%M"))}\n').font.size = Pt(10)
+    info.add_run(f'引擎: {meta.get("engine", "AquaFeedFormulator v2 + PrologAgentTeam")}\n').font.size = Pt(10)
+    info.add_run('校验: Prolog SOP Gatekeeper (8步校验)').font.size = Pt(10)
     
     doc.add_page_break()
     
     # ── 1. 品种与营养需求 ──
     doc.add_heading('1. 品种与营养需求', level=1)
-    
-    species_desc = {
-        '南美白对虾': f'{species} (Litopenaeus vannamei) 是全球养殖产量最高的对虾品种。'
-                       f'{stage}阶段体重通常在 15g 以上，对蛋白质需求较幼虾阶段有所降低，'
-                       f'但对饲料水中稳定性和诱食性要求较高。'
-    }
-    doc.add_paragraph(species_desc.get(species, f'{species} {stage}阶段饲料配方。'))
+    doc.add_paragraph(species_desc)
     
     # 营养需求表
     t = doc.add_table(rows=5, cols=3, style='Light Grid Accent 1')
     t.alignment = WD_TABLE_ALIGNMENT.CENTER
-    for i, h_text in enumerate(['营养指标', '要求值', '说明']):
+    headers = ['营养指标', '要求值', '说明']
+    for i, h_text in enumerate(headers):
         t.rows[0].cells[i].text = h_text
         for p in t.rows[0].cells[i].paragraphs:
             for run in p.runs:
                 run.bold = True
     
     nut_data = [
-        ('粗蛋白 Crude Protein', f'≥ {nutrition["protein"]}%', f'{stage}阶段蛋白需求适中'),
-        ('粗脂肪 Crude Fat', f'≥ {nutrition["fat"]}%', '提供必需脂肪酸和能量'),
-        ('粗纤维 Crude Fiber', f'≤ {nutrition["fiber"]}%', '虾对纤维消化能力有限'),
-        ('粗灰分 Crude Ash', f'≤ {nutrition["ash"]}%', '含甲壳类必需的矿物质'),
+        ('粗蛋白 Crude Protein', f'≥ {nutrition.get("protein", "-")}%', f'{stage}阶段蛋白需求适中'),
+        ('粗脂肪 Crude Fat', f'≥ {nutrition.get("fat", "-")}%', '提供必需脂肪酸和能量'),
+        ('粗纤维 Crude Fiber', f'≤ {nutrition.get("fiber", "-")}%', '虾对纤维消化能力有限'),
+        ('粗灰分 Crude Ash', f'≤ {nutrition.get("ash", "-")}%', '含甲壳类必需的矿物质'),
     ]
     for i, (a, b, c) in enumerate(nut_data, 1):
         t.rows[i].cells[0].text = a
@@ -111,34 +106,55 @@ def generate_docx(data):
     doc.add_paragraph()
     
     # 品类约束
-    constraints = data.get('constraints', [])
     constraint_text = ' | '.join([
-        f"{'淀粉类' if c['type']=='starch' else '动物蛋白' if c['type']=='animal_protein' else '油脂'} "
-        f"{'≤' if c['op']=='max' else '≥'} {c['limit']}%"
+        f"{c.get('desc', c['type'])} {'≤' if c.get('op') == 'max' else '≥'} {c['limit']}%"
         for c in constraints
     ])
     doc.add_paragraph(f'品类约束: {constraint_text}')
     
+    if meta.get('data_sources'):
+        doc.add_paragraph(f'数据来源: {meta["data_sources"]}')
+    
+    if meta.get('disclaimer'):
+        p = doc.add_paragraph()
+        run = p.add_run(meta['disclaimer'])
+        run.font.size = Pt(8)
+        run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+    
     doc.add_page_break()
     
     # ── 2. 配方方案 ──
-    strategies = {
-        'A': '高动物蛋白+强诱食体系。面向高密度精养成虾，追求最高生长速度和成活率。',
-        'B': '动物/植物蛋白均衡。成本与生长性能兼顾，适合主流商业养殖。',
-        'C': '适度植物蛋白替代。控制原料成本，适合价格敏感市场。',
-    }
-    
     for plan in plans:
         pid = plan['id']
         doc.add_heading(f'2.{pid} {plan["name"]}', level=2)
         
-        p = doc.add_paragraph()
-        p.add_run(f'策略: {plan.get("strategy", strategies.get(pid, ""))}').font.size = Pt(10)
+        strategy = plan.get('strategy', '')
+        if strategy:
+            p = doc.add_paragraph()
+            p.add_run(f'策略: {strategy}').font.size = Pt(10)
         
+        # 营养目标 vs 实际
         p = doc.add_paragraph()
+        target_str = (
+            f'营养目标: 蛋白≥{plan.get("protein_target","-")}% 脂肪≥{plan.get("fat_target","-")}% '
+            f'纤维≤{plan.get("fiber_target","-")}% 灰分≤{plan.get("ash_target","-")}%'
+        )
+        actual_str = ''
+        if plan.get('protein_actual') is not None:
+            actual_str = (
+                f'\n营养实际: 蛋白={plan["protein_actual"]:.1f}% 脂肪={plan["fat_actual"]:.1f}% '
+                f'纤维={plan["fiber_actual"]:.1f}% 灰分={plan["ash_actual"]:.1f}%'
+            )
+        run = p.add_run(target_str + actual_str)
+        run.font.size = Pt(9)
+        
+        # 成本与闭合
+        p = doc.add_paragraph()
+        cost = plan.get('cost', plan.get('price_per_kg', 0))
+        closure = plan.get('closure', sum(item['pct'] for item in plan.get('items', [])))
         run = p.add_run(
-            f'吨成本: ¥{plan["cost"]:,}  |  粗蛋白: {plan["protein"]}%  |  '
-            f'粗脂肪: {plan["fat"]}%  |  粗纤维: {plan["fiber"]}%  |  粗灰分: {plan["ash"]}%'
+            f'吨成本: ¥{cost:,.0f}  |  配方闭合: {closure:.1f}%  |  '
+            f'动物蛋白: {plan.get("animal_protein_pct","-")}%  |  淀粉: {plan.get("starch_pct","-")}%'
         )
         run.font.size = Pt(9)
         run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
@@ -168,6 +184,25 @@ def generate_docx(data):
             t.rows[idx].cells[4].text = cat
         
         doc.add_paragraph()
+        
+        # 微量添加剂表
+        additives = plan.get('additives', [])
+        if additives:
+            doc.add_paragraph('微量添加剂 (后处理追加):').runs[0].bold = True
+            at = doc.add_table(rows=len(additives) + 1, cols=3, style='Light Grid Accent 1')
+            at.alignment = WD_TABLE_ALIGNMENT.CENTER
+            for i, h_text in enumerate(['添加剂', '比例(%)', '说明']):
+                at.rows[0].cells[i].text = h_text
+                for p_cell in at.rows[0].cells[i].paragraphs:
+                    for run_cell in p_cell.runs:
+                        run_cell.bold = True
+                        run_cell.font.size = Pt(7)
+            for ai, a in enumerate(additives, 1):
+                at.rows[ai].cells[0].text = a.get('name', '')
+                at.rows[ai].cells[1].text = f'{a.get("pct", 0):.2f}'
+                at.rows[ai].cells[2].text = a.get('reason', '')
+            doc.add_paragraph()
+        
         doc.add_page_break()
     
     # ── 3. 三方案对比 ──
@@ -176,20 +211,27 @@ def generate_docx(data):
     t = doc.add_table(rows=8, cols=4, style='Light Grid Accent 1')
     t.alignment = WD_TABLE_ALIGNMENT.CENTER
     
-    for i, h_text in enumerate(['指标', f'方案A {plans[0]["name"]}', f'方案B {plans[1]["name"]}', f'方案C {plans[2]["name"]}']):
+    headers = ['指标'] + [f'方案{p["id"]} {p["name"]}' for p in plans[:3]]
+    for i, h_text in enumerate(headers):
         t.rows[0].cells[i].text = h_text
         for p_cell in t.rows[0].cells[i].paragraphs:
             for run_cell in p_cell.runs:
                 run_cell.bold = True
     
+    def fmt_val(plan, key, default='-'):
+        v = plan.get(key, default)
+        if isinstance(v, (int, float)):
+            return f'{v:.1f}'
+        return str(v)
+    
     compare_data = [
-        ('吨成本 (元)', [f'¥{p["cost"]:,}' for p in plans]),
-        ('粗蛋白 (%)', [str(p['protein']) for p in plans]),
-        ('粗脂肪 (%)', [str(p['fat']) for p in plans]),
+        ('吨成本 (元)', [f'¥{p.get("cost", 0):,.0f}' for p in plans]),
+        ('配方闭合 (%)', [f'{p.get("closure", 0):.1f}' for p in plans]),
+        ('蛋白实际 (%)', [fmt_val(p, 'protein_actual', p.get('protein_target','-')) for p in plans]),
+        ('脂肪实际 (%)', [fmt_val(p, 'fat_actual', p.get('fat_target','-')) for p in plans]),
         ('动物蛋白 (%)', [str(p.get('animal_protein_pct', '-')) for p in plans]),
         ('淀粉类 (%)', [str(p.get('starch_pct', '-')) for p in plans]),
         ('原料种类数', [str(len(p.get('items', []))) for p in plans]),
-        ('诱食体系', ['鱿鱼膏+虾壳粉+甜菜碱' for _ in plans]),
     ]
     for i, (label, vals) in enumerate(compare_data, 1):
         t.rows[i].cells[0].text = label
@@ -199,51 +241,110 @@ def generate_docx(data):
     doc.add_paragraph()
     
     # ── 4. 校验结果 ──
-    doc.add_heading('4. Prolog 引擎校验结果', level=1)
-    doc.add_paragraph('以下校验由 AquaFeedFormulator Prolog 规则引擎自动执行:')
+    doc.add_heading('4. Prolog SOP Gatekeeper 校验结果', level=1)
+    doc.add_paragraph('以下校验由 AquaFeedFormulator Prolog 规则引擎自动执行 (8步 Gatekeeper):')
     
-    t = doc.add_table(rows=7, cols=4, style='Light Grid Accent 1')
-    t.alignment = WD_TABLE_ALIGNMENT.CENTER
-    
-    for i, h_text in enumerate(['校验项', '方案A', '方案B', '方案C']):
-        t.rows[0].cells[i].text = h_text
-        for p_cell in t.rows[0].cells[i].paragraphs:
-            for run_cell in p_cell.runs:
-                run_cell.bold = True
-    
-    # Calculate closure for each plan
-    closures = []
-    for plan in plans:
-        total = sum(item['pct'] for item in plan.get('items', []))
-        closures.append(f'{"✅" if abs(total - 100.0) <= 0.15 else "⚠"} {total:.1f}%')
-    
-    val_data = [
-        ('配方闭合 (100%±0.1%)', *closures),
-        ('淀粉上限 (≤20%)', *(f'{"✅" if p.get("starch_pct", 99) <= 20 else "❌"} {p.get("starch_pct", "-")}%' for p in plans)),
-        ('动物蛋白下限 (≥25%)', *(f'{"✅" if p.get("animal_protein_pct", 0) >= 25 else "❌"} {p.get("animal_protein_pct", "-")}%' for p in plans)),
-        ('油脂 (2-8%)', *(f'✅ {p["fat"]}%' for p in plans)),
-        ('诱食体系 (≥1项)', '✅ 鱿鱼膏+虾壳粉', '✅ 鱿鱼膏+虾壳粉', '✅ 鱿鱼膏+虾壳粉'),
-        ('水稳定 (≥2项)', '⚠ 面粉+木薯淀粉', '⚠ 面粉+木薯淀粉', '⚠ 面粉+木薯淀粉'),
+    # 8 步校验表
+    sop_steps = [
+        ('营养目标匹配', 'nutrition_match'),
+        ('原料合规性', 'ingredient_compliance'),
+        ('必需氨基酸平衡', 'amino_balance'),
+        ('矿物质平衡', 'mineral_balance'),
+        ('品类约束', 'category_constraints'),
+        ('诱食体系', 'attractant_system'),
+        ('水稳定性', 'water_stability'),
+        ('成本范围', 'cost_range'),
     ]
-    for i, row_data in enumerate(val_data, 1):
-        for j, val in enumerate(row_data):
-            t.rows[i].cells[j].text = val
+    
+    has_any_validation = any(
+        p.get('validation') and (
+            p['validation'].get('mineral') or
+            p['validation'].get('amino') or
+            p['validation'].get('risk')
+        )
+        for p in plans
+    )
+    
+    if has_any_validation:
+        doc.add_paragraph('⏳ 详细校验数据由 Prolog 引擎输出，当前以摘要形式展示。')
+        for plan in plans[:1]:
+            v = plan.get('validation', {})
+            mineral = v.get('mineral', {})
+            amino = v.get('amino', {})
+            risk = v.get('risk', {})
+            
+            if mineral:
+                doc.add_heading(f'  方案{plan["id"]} 矿物质平衡', level=3)
+                doc.add_paragraph(f'可利用磷: {mineral.get("available_phosphorus", "-")} | '
+                                f'钙磷比: {mineral.get("ca_p_ratio", "-")} | '
+                                f'状态: {mineral.get("summary", "-")}')
+            if amino:
+                doc.add_heading(f'  方案{plan["id"]} 氨基酸平衡', level=3)
+                eaa_list = amino.get('eaa_ratios', {})
+                if eaa_list:
+                    items_text = ', '.join([f'{k}={v:.2f}' for k, v in eaa_list.items()])
+                else:
+                    items_text = str(amino)
+                doc.add_paragraph(f'EAA 比值 (理想蛋白=1.0): {items_text}')
+            if risk:
+                doc.add_heading(f'  方案{plan["id"]} 绩效风险评估', level=3)
+                doc.add_paragraph(f'风险等级: {risk.get("risk_level", "-")} | '
+                                f'详细信息: {risk.get("details", str(risk))}')
+    else:
+        # 从 plans 字段提取校验信息
+        t = doc.add_table(rows=4, cols=4, style='Light Grid Accent 1')
+        t.alignment = WD_TABLE_ALIGNMENT.CENTER
+        
+        for i, h_text in enumerate(['校验项', '方案A', '方案B', '方案C']):
+            t.rows[0].cells[i].text = h_text
+            for p_cell in t.rows[0].cells[i].paragraphs:
+                for run_cell in p_cell.runs:
+                    run_cell.bold = True
+        
+        # 闭合校验
+        closures = []
+        for p in plans:
+            c = p.get('closure', sum(item['pct'] for item in p.get('items', [])))
+            closures.append(f'{"✅" if abs(c - 100.0) <= 0.15 else "⚠"} {c:.1f}%')
+        
+        # 淀粉上限
+        starches = []
+        for p in plans:
+            sp = p.get('starch_pct', 99)
+            starches.append(f'{"✅" if sp <= 20.1 else "❌"} {sp}%')
+        
+        # 动物蛋白下限
+        animals = []
+        for p in plans:
+            ap = p.get('animal_protein_pct', 0)
+            animals.append(f'{"✅" if ap >= 24.9 else "❌"} {ap}%')
+        
+        val_data = [
+            ('配方闭合 (100%±0.1%)', *closures),
+            ('淀粉上限 (≤20%)', *starches),
+            ('动物蛋白下限 (≥25%)', *animals),
+        ]
+        for i, row_data in enumerate(val_data, 1):
+            for j, val in enumerate(row_data):
+                t.rows[i].cells[j].text = val
+        doc.add_paragraph()
     
     doc.add_paragraph()
-    doc.add_paragraph(
-        '⚠ 注意: 当前配方水稳定功能组依赖面粉+木薯淀粉。建议方案A可额外添加 '
-        '0.5-1.0% 谷朊粉或预糊化淀粉以增强水中稳定性，减少溶失。'
-    )
     
     # ── 5. 建议 ──
     doc.add_heading('5. 使用建议', level=1)
     
     suggestions = [
-        (f'方案A ({plans[0]["name"]})', '适合高密度精养、出口品质要求高的场景。诱食性强，成活率有保障。'),
-        (f'方案B ({plans[1]["name"]})', '适合主流商业养殖，性价比最优。推荐作为默认方案。'),
-        (f'方案C ({plans[2]["name"]})', '适合原料价格高位时的替代方案。需注意监控 FCR，适时调整。'),
+        (f'方案A ({plans[0]["name"]})' if len(plans) > 0 else '方案A', 
+         '高鱼粉+强诱食体系，适合高密度精养、品质优先的场景。'),
+        (f'方案B ({plans[1]["name"]})' if len(plans) > 1 else '方案B', 
+         '动物/植物蛋白均衡，性价比最优，推荐作为商业养殖默认方案。'),
+        (f'方案C ({plans[2]["name"]})' if len(plans) > 2 else '方案C', 
+         '适度植物蛋白替代，适合原料价格高位的替代方案，需监控FCR。'),
     ]
-    for name, desc in suggestions:
+    for i, (name, desc) in enumerate(suggestions):
+        if i >= len(plans):
+            break
         p = doc.add_paragraph()
         run = p.add_run(f'{name}: ')
         run.bold = True
@@ -260,12 +361,31 @@ def generate_docx(data):
         '4) LP 求解器当前存在 simplex 库兼容性问题，本报告配方为专家经验配方。'
     )
     
-    # ── 附录 ──
+    # ── 附录：数据来源 ──
+    doc.add_page_break()
+    doc.add_heading('附录: 数据来源与声明', level=1)
+    
+    if meta.get('data_sources'):
+        doc.add_paragraph(f'数据来源: {meta["data_sources"]}')
+    
+    doc.add_paragraph()
+    doc.add_paragraph('技术栈: Ruby Bridge (v2.0) → Prolog Agent Team → Python DOCX Generator (v2.1)')
+    doc.add_paragraph(f'原料库: {data.get("ingredient_count", "45")} 种通用水产饲料原料')
+    doc.add_paragraph(f'校验引擎: Prolog SOP Gatekeeper (营养目标/原料合规/EAA平衡/矿物质平衡/品类约束/诱食体系/水稳定性/成本范围)')
+    
+    if meta.get('disclaimer'):
+        doc.add_paragraph()
+        p = doc.add_paragraph()
+        run = p.add_run(meta['disclaimer'])
+        run.font.size = Pt(8)
+        run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+    
+    # 页脚
     doc.add_paragraph()
     doc.add_paragraph()
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run('— 报告由 AquaFeedFormulator v2 + PrologAgentTeam 自动生成 —')
+    run = p.add_run(f'— 报告由 AquaFeedFormulator v2 + PrologAgentTeam 自动生成 ({meta.get("generated_at", "")}) —')
     run.font.size = Pt(8)
     run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
     
@@ -276,12 +396,17 @@ def generate_docx(data):
     return output
 
 def get_embedded_data():
-    """内嵌对虾成体配方数据（LP求解器不可行时的 fallback）"""
+    """内嵌对虾成体配方数据（fallback）"""
     return {
-        "species": "南美白对虾",
-        "stage": "成体",
-        "species_key": "white_shrimp",
-        "stage_key": "adult",
+        "meta": {
+            "species": "南美白对虾", "species_key": "white_shrimp",
+            "stage": "成体", "stage_key": "adult",
+            "species_desc": "南美白对虾 (Litopenaeus vannamei) 是全球养殖产量最高的对虾品种。",
+            "engine": "AquaFeedFormulator v2 + PrologAgentTeam",
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "data_sources": "NRC 2011 / 行业经验数据 / 公开报价",
+            "disclaimer": "⚠ 本报告配方为专家经验参考配方，非商业配方。"
+        },
         "nutrition": {"protein": 35, "fat": 5, "fiber": 5, "ash": 14},
         "constraints": [
             {"type": "starch", "limit": 20, "op": "max", "desc": "淀粉上限"},
@@ -292,9 +417,10 @@ def get_embedded_data():
         "plans": [
             {
                 "id": "A", "name": "高鱼粉精品型",
-                "strategy": "高动物蛋白(41%)+强诱食体系。面向高密度精养成虾，追求最高生长速度和成活率。",
-                "cost": 11200, "protein": 38.5, "fat": 8.5, "fiber": 3.2, "ash": 12.5,
-                "animal_protein_pct": 41, "starch_pct": 21,
+                "strategy": "高动物蛋白+强诱食体系。面向高密度精养成虾，追求最高生长速度和成活率。",
+                "cost": 11200, "protein_target": 38.5, "fat_target": 8.5, "fiber_target": 3.2, "ash_target": 12.5,
+                "protein_actual": None, "fat_actual": None, "fiber_actual": None, "ash_actual": None,
+                "animal_protein_pct": 41, "starch_pct": 21, "closure": 100.0,
                 "items": [
                     {"id": "fish_meal_peru_65", "name": "秘鲁鱼粉(65%)", "pct": 20.0, "category": "动物蛋白"},
                     {"id": "fish_meal_domestic_60", "name": "国产鱼粉(60%)", "pct": 10.0, "category": "动物蛋白"},
@@ -312,21 +438,24 @@ def get_embedded_data():
                     {"id": "soybean_lecithin", "name": "磷脂油", "pct": 1.5, "category": "油脂/乳化"},
                     {"id": "cholesterol", "name": "胆固醇", "pct": 0.3, "category": "必需营养素"},
                     {"id": "dicalcium_phosphate", "name": "磷酸氢钙", "pct": 2.0, "category": "矿物质"},
-                    {"id": "premix_vitamin_aqua", "name": "多维预混料", "pct": 0.5, "category": "维生素"},
-                    {"id": "premix_mineral_aqua", "name": "多矿预混料", "pct": 0.5, "category": "矿物质"},
+                    {"id": "premix_vitamin_aqua", "name": "水产多维预混料", "pct": 0.5, "category": "维生素"},
+                    {"id": "premix_mineral_aqua", "name": "水产多矿预混料", "pct": 0.5, "category": "矿物质"},
                     {"id": "choline_chloride_50", "name": "氯化胆碱(50%)", "pct": 0.5, "category": "维生素"},
                     {"id": "vitamin_c_phosphate", "name": "VC磷酸酯", "pct": 0.15, "category": "维生素"},
                     {"id": "betaine", "name": "甜菜碱", "pct": 0.5, "category": "诱食剂"},
                     {"id": "ethoxyquin", "name": "乙氧喹", "pct": 0.02, "category": "抗氧化剂"},
                     {"id": "mold_inhibitor", "name": "防霉剂", "pct": 0.03, "category": "防霉剂"},
                     {"id": "salt", "name": "食盐", "pct": 0.5, "category": "矿物质"}
-                ]
+                ],
+                "additives": [],
+                "validation": {}
             },
             {
                 "id": "B", "name": "平衡型",
                 "strategy": "动物/植物蛋白均衡(30% 动物蛋白)。成本与生长性能兼顾，适合主流商业养殖。",
-                "cost": 9600, "protein": 37.5, "fat": 7.8, "fiber": 3.8, "ash": 11.8,
-                "animal_protein_pct": 30, "starch_pct": 18,
+                "cost": 9600, "protein_target": 37.5, "fat_target": 7.8, "fiber_target": 3.8, "ash_target": 11.8,
+                "protein_actual": None, "fat_actual": None, "fiber_actual": None, "ash_actual": None,
+                "animal_protein_pct": 30, "starch_pct": 18, "closure": 100.0,
                 "items": [
                     {"id": "fish_meal_peru_65", "name": "秘鲁鱼粉(65%)", "pct": 15.0, "category": "动物蛋白"},
                     {"id": "fish_meal_domestic_60", "name": "国产鱼粉(60%)", "pct": 8.0, "category": "动物蛋白"},
@@ -345,21 +474,24 @@ def get_embedded_data():
                     {"id": "soybean_lecithin", "name": "磷脂油", "pct": 1.5, "category": "油脂/乳化"},
                     {"id": "cholesterol", "name": "胆固醇", "pct": 0.3, "category": "必需营养素"},
                     {"id": "dicalcium_phosphate", "name": "磷酸氢钙", "pct": 2.0, "category": "矿物质"},
-                    {"id": "premix_vitamin_aqua", "name": "多维预混料", "pct": 0.5, "category": "维生素"},
-                    {"id": "premix_mineral_aqua", "name": "多矿预混料", "pct": 0.5, "category": "矿物质"},
+                    {"id": "premix_vitamin_aqua", "name": "水产多维预混料", "pct": 0.5, "category": "维生素"},
+                    {"id": "premix_mineral_aqua", "name": "水产多矿预混料", "pct": 0.5, "category": "矿物质"},
                     {"id": "choline_chloride_50", "name": "氯化胆碱(50%)", "pct": 0.5, "category": "维生素"},
                     {"id": "vitamin_c_phosphate", "name": "VC磷酸酯", "pct": 0.15, "category": "维生素"},
                     {"id": "betaine", "name": "甜菜碱", "pct": 0.5, "category": "诱食剂"},
                     {"id": "ethoxyquin", "name": "乙氧喹", "pct": 0.02, "category": "抗氧化剂"},
                     {"id": "mold_inhibitor", "name": "防霉剂", "pct": 0.03, "category": "防霉剂"},
                     {"id": "salt", "name": "食盐", "pct": 0.5, "category": "矿物质"}
-                ]
+                ],
+                "additives": [],
+                "validation": {}
             },
             {
                 "id": "C", "name": "经济型",
                 "strategy": "适度植物蛋白替代(25% 动物蛋白)。控制原料成本，适合价格敏感市场。",
-                "cost": 8500, "protein": 36.2, "fat": 7.2, "fiber": 4.2, "ash": 11.2,
-                "animal_protein_pct": 25, "starch_pct": 18,
+                "cost": 8500, "protein_target": 36.2, "fat_target": 7.2, "fiber_target": 4.2, "ash_target": 11.2,
+                "protein_actual": None, "fat_actual": None, "fiber_actual": None, "ash_actual": None,
+                "animal_protein_pct": 25, "starch_pct": 18, "closure": 100.0,
                 "items": [
                     {"id": "fish_meal_peru_65", "name": "秘鲁鱼粉(65%)", "pct": 10.0, "category": "动物蛋白"},
                     {"id": "fish_meal_domestic_60", "name": "国产鱼粉(60%)", "pct": 5.0, "category": "动物蛋白"},
@@ -379,15 +511,17 @@ def get_embedded_data():
                     {"id": "soybean_lecithin", "name": "磷脂油", "pct": 1.5, "category": "油脂/乳化"},
                     {"id": "cholesterol", "name": "胆固醇", "pct": 0.3, "category": "必需营养素"},
                     {"id": "dicalcium_phosphate", "name": "磷酸氢钙", "pct": 2.0, "category": "矿物质"},
-                    {"id": "premix_vitamin_aqua", "name": "多维预混料", "pct": 0.5, "category": "维生素"},
-                    {"id": "premix_mineral_aqua", "name": "多矿预混料", "pct": 0.5, "category": "矿物质"},
+                    {"id": "premix_vitamin_aqua", "name": "水产多维预混料", "pct": 0.5, "category": "维生素"},
+                    {"id": "premix_mineral_aqua", "name": "水产多矿预混料", "pct": 0.5, "category": "矿物质"},
                     {"id": "choline_chloride_50", "name": "氯化胆碱(50%)", "pct": 0.5, "category": "维生素"},
                     {"id": "vitamin_c_phosphate", "name": "VC磷酸酯", "pct": 0.15, "category": "维生素"},
                     {"id": "betaine", "name": "甜菜碱", "pct": 0.5, "category": "诱食剂"},
                     {"id": "ethoxyquin", "name": "乙氧喹", "pct": 0.02, "category": "抗氧化剂"},
                     {"id": "mold_inhibitor", "name": "防霉剂", "pct": 0.03, "category": "防霉剂"},
                     {"id": "salt", "name": "食盐", "pct": 0.5, "category": "矿物质"}
-                ]
+                ],
+                "additives": [],
+                "validation": {}
             }
         ]
     }
