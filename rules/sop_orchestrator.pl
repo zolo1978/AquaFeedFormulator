@@ -380,3 +380,222 @@ self_check_modules([M|T]) :-
     ;  write('  ❌ '), write(M), write(' — 不可用'), nl
     ),
     self_check_modules(T).
+
+% ═══════════════════════════════════════════════════════════════
+% 统一 Pipeline 入口 (v2.0)
+%
+% run_unified_pipeline(+Species, +Stage)
+%   单次调用，输出配方 + 营养 + 约束 + 原料 + 校验，
+%   格式与 bridge_prolog_docx.rb 解析器兼容。
+%
+% 用法:
+%   scryer-prolog -g "consult('rules/...'),run_unified_pipeline(white_shrimp,adult)"
+% ═══════════════════════════════════════════════════════════════
+
+run_unified_pipeline(Species, Stage) :-
+    % ── Section 1: Meta (species + nutrition + constraints + ingredients) ──
+    write_meta_section(Species, Stage),
+    nl,
+
+    % ── Section 2: Plans (3 strategies) ──
+    (  catch(generate_recipe_plans(Species, Stage, PlanOut), _, fail) ->
+        PlanOut = output(Plans, _, _, _, _),
+        write_plan_sections(Plans)
+    ;  write('PLAN_ERROR: recipe_planner failed'), nl
+    ),
+
+    % ── Section 3: Validation per plan ──
+    (  nonvar(Plans) ->
+        write_validation_sections(Species, Stage, Plans)
+    ;  true
+    ),
+
+    nl, write('PIPELINE_DONE'), nl.
+
+% ═══════════════════════════════════════════════════════════════
+% Section 1: Meta 输出
+% ═══════════════════════════════════════════════════════════════
+
+write_meta_section(Species, Stage) :-
+    species_name(Species, SName),
+    stage_name(Stage, StName),
+    write('META_START'), nl,
+    write('species_key='), write(Species), nl,
+    write('species_cn='), write(SName), nl,
+    write('stage='), write(Stage), nl,
+    write('stage_cn='), write(StName), nl,
+    write('META_END'), nl,
+
+    % 营养需求
+    species_nutrition(Species, Stage, Pro, Fat, Fib, Ash),
+    write('NUTRITION '), write(Pro), write(' '), write(Fat),
+    write(' '), write(Fib), write(' '), write(Ash), nl,
+
+    % 品类约束
+    species_category_constraints(Species, Stage, Cats),
+    write_cat_constraints(Cats),
+
+    % 原料数据库
+    write('INGREDIENTS_START'), nl,
+    findall(Id-Cn-Cat-Pro2-Fat2-Fib2-Ash2-Price-Max-Min,
+        ingredient(Id, Cn, Cat, Pro2, Fat2, Fib2, Ash2, _, Price, Max, Min),
+        All),
+    write_ingredient_lines(All),
+    write('INGREDIENTS_END'), nl.
+
+write_cat_constraints([]).
+write_cat_constraints([Cat-LT-Val|Rest]) :-
+    write('CONSTRAINT '), write(Cat), write(' '),
+    write(LT), write(' '), write(Val), nl,
+    write_cat_constraints(Rest).
+
+write_ingredient_lines([]).
+write_ingredient_lines([Id-Cn-Cat-Pro2-Fat2-Fib2-Ash2-Price-Max-Min|Rest]) :-
+    write('ing '), write(Id), write('|'), write(Cn), write('|'), write(Cat),
+    write('|'), write(Pro2), write('|'), write(Fat2), write('|'), write(Fib2),
+    write('|'), write(Ash2), write('|'), write(Price), write('|'),
+    write(Max), write('|'), write(Min), nl,
+    write_ingredient_lines(Rest).
+
+% ═══════════════════════════════════════════════════════════════
+% Section 2: Plans 输出 (配方方案)
+% ═══════════════════════════════════════════════════════════════
+
+write_plan_sections([]).
+write_plan_sections([plan(Strat, Status, Items, Cost, Profile)|Rest]) :-
+    Profile = profile(ApMin, FmMin, Risk, CW),
+    write('PLAN_START'), nl,
+    write('strategy='), write(Strat), nl,
+    write('status='), write(Status), nl,
+    write('cost='), write(Cost), nl,
+    write('ap_min='), write(ApMin), nl,
+    write('fm_min='), write(FmMin), nl,
+    write('risk='), write(Risk), nl,
+    write('cw='), write(CW), nl,
+    write_items_clean(Items),
+    write('PLAN_END'), nl,
+    write_plan_sections(Rest).
+
+write_items_clean([]).
+write_items_clean([item(Id, Pct, Cost)|Rest]) :-
+    write('item '), write(Id), write(' '), write(Pct),
+    write(' '), write(Cost), nl,
+    write_items_clean(Rest).
+
+% ═══════════════════════════════════════════════════════════════
+% Section 3: Validation 输出 (校验)
+% ═══════════════════════════════════════════════════════════════
+
+write_validation_sections(_, _, []).
+write_validation_sections(Species, Stage, [plan(Strat, _, ItemsItem3, _, _)|Rest]) :-
+    write('VAL_START '), write(Strat), nl,
+
+    % 格式转换: item(Id,Pct,Cost) → Id-Pct-Cost
+    items_to_pairs(ItemsItem3, Items),
+
+    % 实际营养
+    calc_actual_nutrition(ItemsItem3, Pro, Fat, Fib, Ash),
+    ProR is round(Pro * 10) / 10,
+    FatR is round(Fat * 10) / 10,
+    FibR is round(Fib * 10) / 10,
+    AshR is round(Ash * 10) / 10,
+    write('  actual_nutrition '), write(ProR), write(' '), write(FatR),
+    write(' '), write(FibR), write(' '), write(AshR), nl,
+
+    % 矿物质校验
+    (  catch(once(mineral_check(Species, Stage, Items, MOut)),
+             _, MOut = output(data([]),[err(error,_)],[],0.0,[])) ->
+        true ; MOut = output(data([]),[err(error,_)],[],0.0,[])
+    ),
+    write_val_mineral(MOut),
+
+    % 氨基酸校验
+    (  catch(once(eaa_check(Species, Stage, Items, AOut)),
+             _, AOut = output(data([]),[err(error,_)],[],0.0,[])) ->
+        true ; AOut = output(data([]),[err(error,_)],[],0.0,[])
+    ),
+    write_val_amino(AOut),
+
+    % 绩效风险
+    (  catch(performance_risk_check(Species, Stage, Items, ROut),
+             _, ROut = output(data([]),[err(error,_)],[],0.0,[])) ->
+        true ; ROut = output(data([]),[err(error,_)],[],0.0,[])
+    ),
+    write_val_risk(ROut),
+
+    write('VAL_END'), nl,
+    write_validation_sections(Species, Stage, Rest).
+
+% ── 格式转换 ──
+items_to_pairs([], []).
+items_to_pairs([item(Id, Pct, Cost)|T], [Id-Pct-Cost|RT]) :-
+    items_to_pairs(T, RT).
+
+% ── 营养计算 ──
+calc_actual_nutrition([], 0, 0, 0, 0).
+calc_actual_nutrition([item(_, 0, _)|T], P, F, B, A) :-
+    !, calc_actual_nutrition(T, P, F, B, A).
+calc_actual_nutrition([item(Id, Pct, _)|T], Pro, Fat, Fib, Ash) :-
+    ingredient(Id, _, _, IngPro, IngFat, IngFib, IngAsh, _, _, _, _),
+    calc_actual_nutrition(T, PR, FR, BR, AR),
+    Pro is PR + Pct * IngPro / 100,
+    Fat is FR + Pct * IngFat / 100,
+    Fib is BR + Pct * IngFib / 100,
+    Ash is AR + Pct * IngAsh / 100.
+
+% ── 矿物质输出 ──
+write_val_mineral(output(data(Checks), _Ws, _Es, Conf, _)) :-
+    write('  mineral_confidence '), write(Conf), nl,
+    write_mineral_checks(Checks).
+
+write_mineral_checks([]).
+write_mineral_checks([C|T]) :-
+    C =.. [check|Args],
+    (  Args = [Name, Status, Actual, Required] ->
+        write('  mineral_check '), write(Name), write(' '),
+        write(Status), write(' '), write(Actual), write(' '),
+        write(Required), nl
+    ;  Args = [ca_p_ratio, Status, Ratio, Min, Max] ->
+        write('  mineral_check ca_p_ratio '), write(Status),
+        write(' '), write(Ratio), write(' '), write(Min),
+        write('-'), write(Max), nl
+    ;  Args = [ca_p_ratio, Status, Ratio, Min, Max, _Dir] ->
+        write('  mineral_check ca_p_ratio '), write(Status),
+        write(' '), write(Ratio), write(' '), write(Min),
+        write('-'), write(Max), nl
+    ;  true
+    ),
+    write_mineral_checks(T).
+
+% ── 氨基酸输出 ──
+write_val_amino(output(data(Checks), _Ws, _Es, Conf, _)) :-
+    write('  amino_confidence '), write(Conf), nl,
+    write_amino_checks(Checks).
+
+write_amino_checks([]).
+write_amino_checks([C|T]) :-
+    C =.. [check, Name, Status, Actual, Required|_],
+    write('  amino_check '), write(Name), write(' '),
+    write(Status), write(' '), write(Actual), write(' '),
+    write(Required), nl,
+    write_amino_checks(T).
+
+% ── 绩效风险输出 ──
+write_val_risk(output(data(Checks), _Ws, _Es, Conf, _)) :-
+    write('  risk_confidence '), write(Conf), nl,
+    write_risk_checks(Checks).
+
+write_risk_checks([]).
+write_risk_checks([C|T]) :-
+    C =.. [risk, Name, Level, Value],
+    write('  risk_check '), write(Name), write(' '),
+    write(Level), write(' '), write(Value), nl,
+    write_risk_checks(T).
+
+% ═══════════════════════════════════════════════════════════════
+% 独立测试入口
+% ═══════════════════════════════════════════════════════════════
+
+test_unified_pipeline :-
+    write('=== Unified Pipeline Test ==='), nl,
+    run_unified_pipeline(white_shrimp, adult).

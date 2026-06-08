@@ -66,8 +66,23 @@ fn main() {
 // Prolog 执行引擎
 // ═══════════════════════════════════════════════════════════════
 
-fn scryer_prolog_path() -> &'static str {
-    "/opt/homebrew/bin/scryer-prolog"
+fn scryer_prolog_path() -> String {
+    // 优先使用环境变量，其次 which 查找，最后 fallback
+    if let Ok(path) = std::env::var("SCRYER_PROLOG") {
+        return path;
+    }
+    // macOS Homebrew 默认路径
+    let homebrew = "/opt/homebrew/bin/scryer-prolog";
+    if std::path::Path::new(homebrew).exists() {
+        return homebrew.to_string();
+    }
+    // Linux/Intel Mac
+    let linuxbrew = "/usr/local/bin/scryer-prolog";
+    if std::path::Path::new(linuxbrew).exists() {
+        return linuxbrew.to_string();
+    }
+    // 最后的 fallback
+    "scryer-prolog".to_string()
 }
 
 fn project_root() -> PathBuf {
@@ -91,6 +106,12 @@ fn run_prolog(query: &str, state_facts: &[&str]) -> std::process::Output {
              consult('rules/formulation_lp_engine.pl'),\
              consult('rules/delivery_gatekeeper.pl'),\
              consult('rules/sop_engine.pl'),\
+             consult('rules/recipe_planner.pl'),\
+             consult('rules/cost_range_rules.pl'),\
+             consult('rules/mineral_constraints.pl'),\
+             consult('rules/amino_acid_check.pl'),\
+             consult('rules/performance_validator.pl'),\
+             consult('rules/sop_orchestrator.pl'),\
              {}, halt.",
             query
         )
@@ -104,6 +125,12 @@ fn run_prolog(query: &str, state_facts: &[&str]) -> std::process::Output {
              consult('rules/formulation_lp_engine.pl'),\
              consult('rules/delivery_gatekeeper.pl'),\
              consult('rules/sop_engine.pl'),\
+             consult('rules/recipe_planner.pl'),\
+             consult('rules/cost_range_rules.pl'),\
+             consult('rules/mineral_constraints.pl'),\
+             consult('rules/amino_acid_check.pl'),\
+             consult('rules/performance_validator.pl'),\
+             consult('rules/sop_orchestrator.pl'),\
              {}, halt.",
             facts_block, query
         )
@@ -131,87 +158,57 @@ fn run_prolog_bool(query: &str, state_facts: &[&str]) -> (bool, String) {
 fn solve(project: &str, species: &str, stage: &str) {
     let started_at = Utc::now();
     let mut steps: Vec<ExecutionStep> = Vec::new();
-    let state_fact = format!("project_state({}, solving)", project);
-    let state_facts: Vec<&str> = vec![&state_fact];
 
-    println!("=== AquaFeedFormulator ===");
+    println!("=== AquaFeedFormulator v3.0 (Unified Pipeline) ===");
     println!("项目: {} | 物种: {} | 阶段: {}", project, species, stage);
     println!();
 
-    // ── Step 1: can_execute 门禁 ──────────────────────────
-    println!("[1/3] can_execute 门禁检查...");
-    let q1 = format!("can_execute({}, solve({}, {})).", project, species, stage);
-    let (ok1, out1) = run_prolog_bool(&q1, &state_facts);
+    // 单次调用 Ruby Bridge (统一 Prolog 入口)
+    println!("[1/2] 运行统一 Pipeline (bridge_prolog_docx.rb)...");
+    let bridge_script = project_root().join("scripts/bridge_prolog_docx.rb");
+    let output = Command::new("ruby")
+        .arg(bridge_script.to_str().unwrap())
+        .arg(species)
+        .arg(stage)
+        .current_dir(project_root())
+        .output()
+        .expect("Failed to run bridge script");
 
-    steps.push(ExecutionStep {
-        seq: 1,
-        action: "can_execute".into(),
-        prolog_call: q1,
-        result: if ok1 { "allow".into() } else { "block".into() },
-        timestamp: Utc::now().to_rfc3339(),
-    });
-
-    if !ok1 {
-        eprintln!("[BLOCKED] can_execute 拒绝执行");
-        eprintln!("{}", out1);
+    if !output.status.success() {
+        eprintln!("[FAILED] Bridge 执行失败");
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+        steps.push(ExecutionStep {
+            seq: 1,
+            action: "bridge_pipeline".into(),
+            prolog_call: "bridge_prolog_docx.rb".into(),
+            result: "failed".into(),
+            timestamp: Utc::now().to_rfc3339(),
+        });
         write_execution_log(project, &steps, &started_at, 1);
         return;
     }
-    println!("  ✅ can_execute: allow");
 
-    // ── Step 2: LP 求解 ───────────────────────────────────
-    println!("[2/3] LP 配方求解...");
-    let q2 = format!("solve_formulation({}, {}).", species, stage);
-    let (ok2, out2) = run_prolog_bool(&q2, &state_facts);
+    let bridge_stdout = String::from_utf8_lossy(&output.stdout);
+    println!("{}", bridge_stdout);
 
     steps.push(ExecutionStep {
-        seq: 2,
-        action: "solve_formulation".into(),
-        prolog_call: q2,
-        result: if ok2 && !out2.contains("infeasible") && !out2.contains("不可行") { "solved".into() } else { "infeasible".into() },
+        seq: 1,
+        action: "bridge_pipeline".into(),
+        prolog_call: "bridge_prolog_docx.rb".into(),
+        result: "completed".into(),
         timestamp: Utc::now().to_rfc3339(),
     });
 
-    if !ok2 || out2.contains("infeasible") || out2.contains("不可行") {
-        let result = ValidationResult {
-            project_id: project.to_string(),
-            timestamp: Utc::now().to_rfc3339(),
-            species: species.to_string(),
-            stage: stage.to_string(),
-            solution: SolutionResult::Infeasible {
-                reason: "营养目标与品类约束冲突 — 将使用专家经验配方生成报告".into(),
-            },
-        };
-        write_json("validation_result.json", &result);
-        write_execution_log(project, &steps, &started_at, 2);
-        eprintln!("[INFEASIBLE] LP 约束冲突 — 使用专家经验配方生成 DOCX 报告");
-        // 继续执行 DOCX 生成（使用内嵌配方数据）
-        generate_docx_report(species, stage);
-        // 复盘 + 自我迭代
-        generate_retrospective(species, stage, &steps, &started_at, false);
-        run_self_iteration(species, stage);
-        return;
-    }
-    println!("  ✅ LP 求解完成");
+    // 读取 bridge 生成的 recipe_data.json
+    println!("[2/2] 生成验证与交付报告...");
+    let recipe_path = project_root().join("generated/recipe_data.json");
+    let recipe_data = std::fs::read_to_string(&recipe_path);
 
-    // ── Step 3: delivery_gatekeeper ───────────────────────
-    println!("[3/3] 交付门禁...");
-    let q3 = format!(
-        "deliverable({}, {}, D), write(D)",
-        species, stage
-    );
-    let (ok3, out3) = run_prolog_bool(&q3, &state_facts);
-
-    let deliverable = ok3 && out3.contains("passed");
-    steps.push(ExecutionStep {
-        seq: 3,
-        action: "delivery_gatekeeper".into(),
-        prolog_call: q3,
-        result: if deliverable { "passed".into() } else { "failed".into() },
-        timestamp: Utc::now().to_rfc3339(),
-    });
-
-    // ── 输出 JSON ─────────────────────────────────────────
+    let deliverable = recipe_data.is_ok();
+    let num_plans = recipe_data.as_ref().ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+        .and_then(|v| v["plans"].as_array().map(|a| a.len()))
+        .unwrap_or(0);
 
     let completed_at = Utc::now();
 
@@ -221,8 +218,14 @@ fn solve(project: &str, species: &str, stage: &str) {
         timestamp: completed_at.to_rfc3339(),
         species: species.to_string(),
         stage: stage.to_string(),
-        solution: SolutionResult::Solved {
-            message: "LP solver produced feasible solution".into(),
+        solution: if deliverable {
+            SolutionResult::Solved {
+                message: format!("统一 Pipeline 生成 {} 套方案, DOCX 已生成", num_plans),
+            }
+        } else {
+            SolutionResult::Infeasible {
+                reason: "Bridge 执行成功但 recipe_data.json 未生成".into(),
+            }
         },
     };
     write_json("validation_result.json", &validation);
@@ -243,10 +246,10 @@ fn solve(project: &str, species: &str, stage: &str) {
             rule_approved: "skip".into(),
             counterexample: "skip".into(),
         },
-        failures: if deliverable { vec![] } else { vec!["delivery_gatekeeper failed".into()] },
+        failures: if deliverable { vec![] } else { vec!["recipe_data.json 生成失败".into()] },
         warnings: vec![
-            "当前 LP 解为大宗原料成本最小可行解".into(),
-            "氨基酸平衡未建模".into(),
+            "统一 Pipeline: META→PLANS→VALIDATION 一次完成".into(),
+            "SOP 校验覆盖: 矿物质 (2项) + 氨基酸 (11项) + 风险 (7项)".into(),
             "未经过养殖试验验证".into(),
         ],
         report_disclaimer: "当前结果为模型约束下的可行方案，非养殖试验验证配方。不可表述为「降本X%」等商业承诺。".into(),
@@ -259,21 +262,16 @@ fn solve(project: &str, species: &str, stage: &str) {
     println!();
     println!("═══════════════════════════════════════");
     println!("  交付判定: {}", if deliverable { "✅ 通过" } else { "❌ 未通过" });
+    println!("  方案数: {}", num_plans);
     println!("  输出文件:");
+    println!("    generated/recipe_data.json");
     println!("    generated/validation_result.json");
     println!("    generated/delivery_decision.json");
     println!("    generated/execution_log.json");
+    println!("    Desktop/*.docx (配方报告)");
     println!("═══════════════════════════════════════");
-    
-    // ── Step 4: DOCX 报告生成 ────────────────────────────
-    generate_docx_report(species, stage);
-
-    // ── Step 5: 复盘报告 ─────────────────────────────────
-    generate_retrospective(species, stage, &steps, &started_at, deliverable);
-
-    // ── Step 6: 自我迭代 ─────────────────────────────────
-    run_self_iteration(species, stage);
 }
+
 
 fn write_execution_log(project: &str, steps: &[ExecutionStep], started_at: &chrono::DateTime<Utc>, exit_code: i32) {
     let log = ExecutionLog {

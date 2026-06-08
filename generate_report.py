@@ -396,135 +396,14 @@ def generate_docx(data):
     return output
 
 def get_embedded_data():
-    """内嵌对虾成体配方数据（fallback）"""
-    return {
-        "meta": {
-            "species": "南美白对虾", "species_key": "white_shrimp",
-            "stage": "成体", "stage_key": "adult",
-            "species_desc": "南美白对虾 (Litopenaeus vannamei) 是全球养殖产量最高的对虾品种。",
-            "engine": "AquaFeedFormulator v2 + PrologAgentTeam",
-            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "data_sources": "NRC 2011 / 行业经验数据 / 公开报价",
-            "disclaimer": "⚠ 本报告配方为专家经验参考配方，非商业配方。"
-        },
-        "nutrition": {"protein": 35, "fat": 5, "fiber": 5, "ash": 14},
-        "constraints": [
-            {"type": "starch", "limit": 20, "op": "max", "desc": "淀粉上限"},
-            {"type": "animal_protein", "limit": 25, "op": "min", "desc": "动物蛋白下限"},
-            {"type": "oil", "limit": 8, "op": "max", "desc": "油脂上限"},
-            {"type": "oil", "limit": 2, "op": "min", "desc": "油脂下限"}
-        ],
-        "plans": [
-            {
-                "id": "A", "name": "高鱼粉精品型",
-                "strategy": "高动物蛋白+强诱食体系。面向高密度精养成虾，追求最高生长速度和成活率。",
-                "cost": 11200, "protein_target": 38.5, "fat_target": 8.5, "fiber_target": 3.2, "ash_target": 12.5,
-                "protein_actual": None, "fat_actual": None, "fiber_actual": None, "ash_actual": None,
-                "animal_protein_pct": 41, "starch_pct": 21, "closure": 100.0,
-                "items": [
-                    {"id": "fish_meal_peru_65", "name": "秘鲁鱼粉(65%)", "pct": 20.0, "category": "动物蛋白"},
-                    {"id": "fish_meal_domestic_60", "name": "国产鱼粉(60%)", "pct": 10.0, "category": "动物蛋白"},
-                    {"id": "shrimp_shell_meal", "name": "虾壳粉", "pct": 5.0, "category": "动物蛋白/诱食"},
-                    {"id": "squid_liver_paste", "name": "鱿鱼膏", "pct": 3.0, "category": "动物蛋白/诱食"},
-                    {"id": "poultry_meal", "name": "鸡肉粉", "pct": 3.0, "category": "动物蛋白"},
-                    {"id": "soybean_meal_46", "name": "豆粕(46%)", "pct": 15.0, "category": "植物蛋白"},
-                    {"id": "peanut_meal", "name": "花生粕", "pct": 5.0, "category": "植物蛋白"},
-                    {"id": "fermented_soybean_meal", "name": "发酵豆粕", "pct": 5.0, "category": "植物蛋白"},
-                    {"id": "corn_gluten_meal_60", "name": "玉米蛋白粉(60%)", "pct": 3.0, "category": "植物蛋白"},
-                    {"id": "wheat_flour", "name": "面粉", "pct": 18.0, "category": "淀粉/粘合剂"},
-                    {"id": "tapioca_starch", "name": "木薯淀粉", "pct": 3.0, "category": "淀粉/粘合剂"},
-                    {"id": "rice_bran_defatted", "name": "脱脂米糠", "pct": 2.0, "category": "填充"},
-                    {"id": "fish_oil", "name": "鱼油", "pct": 2.5, "category": "油脂"},
-                    {"id": "soybean_lecithin", "name": "磷脂油", "pct": 1.5, "category": "油脂/乳化"},
-                    {"id": "cholesterol", "name": "胆固醇", "pct": 0.3, "category": "必需营养素"},
-                    {"id": "dicalcium_phosphate", "name": "磷酸氢钙", "pct": 2.0, "category": "矿物质"},
-                    {"id": "premix_vitamin_aqua", "name": "水产多维预混料", "pct": 0.5, "category": "维生素"},
-                    {"id": "premix_mineral_aqua", "name": "水产多矿预混料", "pct": 0.5, "category": "矿物质"},
-                    {"id": "choline_chloride_50", "name": "氯化胆碱(50%)", "pct": 0.5, "category": "维生素"},
-                    {"id": "vitamin_c_phosphate", "name": "VC磷酸酯", "pct": 0.15, "category": "维生素"},
-                    {"id": "betaine", "name": "甜菜碱", "pct": 0.5, "category": "诱食剂"},
-                    {"id": "ethoxyquin", "name": "乙氧喹", "pct": 0.02, "category": "抗氧化剂"},
-                    {"id": "mold_inhibitor", "name": "防霉剂", "pct": 0.03, "category": "防霉剂"},
-                    {"id": "salt", "name": "食盐", "pct": 0.5, "category": "矿物质"}
-                ],
-                "additives": [],
-                "validation": {}
-            },
-            {
-                "id": "B", "name": "平衡型",
-                "strategy": "动物/植物蛋白均衡(30% 动物蛋白)。成本与生长性能兼顾，适合主流商业养殖。",
-                "cost": 9600, "protein_target": 37.5, "fat_target": 7.8, "fiber_target": 3.8, "ash_target": 11.8,
-                "protein_actual": None, "fat_actual": None, "fiber_actual": None, "ash_actual": None,
-                "animal_protein_pct": 30, "starch_pct": 18, "closure": 100.0,
-                "items": [
-                    {"id": "fish_meal_peru_65", "name": "秘鲁鱼粉(65%)", "pct": 15.0, "category": "动物蛋白"},
-                    {"id": "fish_meal_domestic_60", "name": "国产鱼粉(60%)", "pct": 8.0, "category": "动物蛋白"},
-                    {"id": "poultry_meal", "name": "鸡肉粉", "pct": 4.0, "category": "动物蛋白"},
-                    {"id": "shrimp_shell_meal", "name": "虾壳粉", "pct": 3.0, "category": "动物蛋白/诱食"},
-                    {"id": "squid_liver_paste", "name": "鱿鱼膏", "pct": 2.0, "category": "动物蛋白/诱食"},
-                    {"id": "soybean_meal_46", "name": "豆粕(46%)", "pct": 20.0, "category": "植物蛋白"},
-                    {"id": "peanut_meal", "name": "花生粕", "pct": 6.0, "category": "植物蛋白"},
-                    {"id": "cottonseed_meal_dephenol", "name": "棉粕(脱酚)", "pct": 5.0, "category": "植物蛋白"},
-                    {"id": "fermented_soybean_meal", "name": "发酵豆粕", "pct": 5.0, "category": "植物蛋白"},
-                    {"id": "corn_gluten_meal_60", "name": "玉米蛋白粉(60%)", "pct": 2.0, "category": "植物蛋白"},
-                    {"id": "wheat_flour", "name": "面粉", "pct": 16.0, "category": "淀粉/粘合剂"},
-                    {"id": "tapioca_starch", "name": "木薯淀粉", "pct": 2.0, "category": "淀粉/粘合剂"},
-                    {"id": "rice_bran_defatted", "name": "脱脂米糠", "pct": 4.0, "category": "填充"},
-                    {"id": "fish_oil", "name": "鱼油", "pct": 2.5, "category": "油脂"},
-                    {"id": "soybean_lecithin", "name": "磷脂油", "pct": 1.5, "category": "油脂/乳化"},
-                    {"id": "cholesterol", "name": "胆固醇", "pct": 0.3, "category": "必需营养素"},
-                    {"id": "dicalcium_phosphate", "name": "磷酸氢钙", "pct": 2.0, "category": "矿物质"},
-                    {"id": "premix_vitamin_aqua", "name": "水产多维预混料", "pct": 0.5, "category": "维生素"},
-                    {"id": "premix_mineral_aqua", "name": "水产多矿预混料", "pct": 0.5, "category": "矿物质"},
-                    {"id": "choline_chloride_50", "name": "氯化胆碱(50%)", "pct": 0.5, "category": "维生素"},
-                    {"id": "vitamin_c_phosphate", "name": "VC磷酸酯", "pct": 0.15, "category": "维生素"},
-                    {"id": "betaine", "name": "甜菜碱", "pct": 0.5, "category": "诱食剂"},
-                    {"id": "ethoxyquin", "name": "乙氧喹", "pct": 0.02, "category": "抗氧化剂"},
-                    {"id": "mold_inhibitor", "name": "防霉剂", "pct": 0.03, "category": "防霉剂"},
-                    {"id": "salt", "name": "食盐", "pct": 0.5, "category": "矿物质"}
-                ],
-                "additives": [],
-                "validation": {}
-            },
-            {
-                "id": "C", "name": "经济型",
-                "strategy": "适度植物蛋白替代(25% 动物蛋白)。控制原料成本，适合价格敏感市场。",
-                "cost": 8500, "protein_target": 36.2, "fat_target": 7.2, "fiber_target": 4.2, "ash_target": 11.2,
-                "protein_actual": None, "fat_actual": None, "fiber_actual": None, "ash_actual": None,
-                "animal_protein_pct": 25, "starch_pct": 18, "closure": 100.0,
-                "items": [
-                    {"id": "fish_meal_peru_65", "name": "秘鲁鱼粉(65%)", "pct": 10.0, "category": "动物蛋白"},
-                    {"id": "fish_meal_domestic_60", "name": "国产鱼粉(60%)", "pct": 5.0, "category": "动物蛋白"},
-                    {"id": "poultry_meal", "name": "鸡肉粉", "pct": 5.0, "category": "动物蛋白"},
-                    {"id": "shrimp_shell_meal", "name": "虾壳粉", "pct": 3.0, "category": "动物蛋白/诱食"},
-                    {"id": "squid_liver_paste", "name": "鱿鱼膏", "pct": 2.0, "category": "动物蛋白/诱食"},
-                    {"id": "soybean_meal_46", "name": "豆粕(46%)", "pct": 22.0, "category": "植物蛋白"},
-                    {"id": "peanut_meal", "name": "花生粕", "pct": 5.0, "category": "植物蛋白"},
-                    {"id": "cottonseed_meal_dephenol", "name": "棉粕(脱酚)", "pct": 5.0, "category": "植物蛋白"},
-                    {"id": "rapeseed_meal_regular", "name": "菜粕", "pct": 4.0, "category": "植物蛋白"},
-                    {"id": "fermented_soybean_meal", "name": "发酵豆粕", "pct": 5.0, "category": "植物蛋白"},
-                    {"id": "corn_gluten_meal_60", "name": "玉米蛋白粉(60%)", "pct": 2.0, "category": "植物蛋白"},
-                    {"id": "wheat_flour", "name": "面粉", "pct": 16.0, "category": "淀粉/粘合剂"},
-                    {"id": "tapioca_starch", "name": "木薯淀粉", "pct": 2.0, "category": "淀粉/粘合剂"},
-                    {"id": "rice_bran_defatted", "name": "脱脂米糠", "pct": 4.0, "category": "填充"},
-                    {"id": "fish_oil", "name": "鱼油", "pct": 2.5, "category": "油脂"},
-                    {"id": "soybean_lecithin", "name": "磷脂油", "pct": 1.5, "category": "油脂/乳化"},
-                    {"id": "cholesterol", "name": "胆固醇", "pct": 0.3, "category": "必需营养素"},
-                    {"id": "dicalcium_phosphate", "name": "磷酸氢钙", "pct": 2.0, "category": "矿物质"},
-                    {"id": "premix_vitamin_aqua", "name": "水产多维预混料", "pct": 0.5, "category": "维生素"},
-                    {"id": "premix_mineral_aqua", "name": "水产多矿预混料", "pct": 0.5, "category": "矿物质"},
-                    {"id": "choline_chloride_50", "name": "氯化胆碱(50%)", "pct": 0.5, "category": "维生素"},
-                    {"id": "vitamin_c_phosphate", "name": "VC磷酸酯", "pct": 0.15, "category": "维生素"},
-                    {"id": "betaine", "name": "甜菜碱", "pct": 0.5, "category": "诱食剂"},
-                    {"id": "ethoxyquin", "name": "乙氧喹", "pct": 0.02, "category": "抗氧化剂"},
-                    {"id": "mold_inhibitor", "name": "防霉剂", "pct": 0.03, "category": "防霉剂"},
-                    {"id": "salt", "name": "食盐", "pct": 0.5, "category": "矿物质"}
-                ],
-                "additives": [],
-                "validation": {}
-            }
-        ]
-    }
+    """Fallback: 从 recipe_data.json 读取 (bridge v3.0 always generates this)"""
+    json_path = Path(__file__).parent / 'generated' / 'recipe_data.json'
+    if json_path.exists():
+        with open(json_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    raise FileNotFoundError(
+        'recipe_data.json 未生成。请先运行 bridge_prolog_docx.rb 生成配方数据。'
+    )
 
 if __name__ == '__main__':
     main()

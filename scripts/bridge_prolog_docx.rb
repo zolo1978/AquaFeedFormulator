@@ -1,7 +1,8 @@
 #!/usr/bin/env ruby
-# bridge_prolog_docx.rb — Prolog 求解 → 验证 → JSON → DOCX
+# bridge_prolog_docx.rb — Prolog 求解 → 验证 → JSON → DOCX (v3.0 Unified)
 # 用法: ruby bridge_prolog_docx.rb <species_key> [stage]
 #
+# v3.0: 统一 Pipeline — 单次 scryer-prolog 调用，通过 sop_orchestrator.pl 完成全部流程
 # v2.0: 集成 SOP 校验真实数据（氨基酸/矿物质/绩效风险）
 #       每个数据点标注来源模块
 
@@ -61,278 +62,45 @@ DATA_SOURCES = [
 ].freeze
 
 # ═══════════════════════════════════════════════════════════════
-# Step 1: Prolog recipe_planner (3 strategies)
+# Unified Prolog Runner (v3.0 — 单次调用替代 3 次)
 # ═══════════════════════════════════════════════════════════════
 
-def run_prolog_plans
-  prolog_src = <<~PL
-    :- initialization(main).
-    base('#{RULES_DIR}/').
+def run_unified_prolog
+  Dir.mktmpdir('bridge-unified-') do |dir|
+    pl_file = File.join(dir, 'unified.pl')
+    File.write(pl_file, <<~PL)
+      :- initialization(main).
 
-    main :-
-        base(B),
-        consult_all(B, [
-            ingredient_db, species_nutrition, category_rules,
-            ingredient_amino, shrimp_adult_recipes,
-            formulation_lp_engine, recipe_planner
-        ]),
-        generate_recipe_plans(#{SPECIES_KEY}, #{STAGE}, Out),
-        Out = output(Plans, _, _, _, _),
-        write_plans(Plans),
-        halt.
+      main :-
+          consult_all('#{RULES_DIR}/', [
+              ingredient_db, species_nutrition, category_rules,
+              sop_engine,
+              formulation_lp_engine, recipe_planner,
+              mineral_balance, eaa_balance, ingredient_amino,
+              performance_risk_rules,
+              sop_orchestrator
+          ]),
+          run_unified_pipeline(#{SPECIES_KEY}, #{STAGE}),
+          halt.
 
-    consult_all(_, []).
-    consult_all(Base, [Name|Rest]) :-
-        atom_concat(Base, Name, P0),
-        atom_concat(P0, '.pl', Path),
-        consult(Path),
-        consult_all(Base, Rest).
+      consult_all(_, []).
+      consult_all(Base, [Name|Rest]) :-
+          atom_concat(Base, Name, P0),
+          atom_concat(P0, '.pl', Path),
+          consult(Path),
+          consult_all(Base, Rest).
+    PL
 
-    write_plans([]).
-    write_plans([plan(Strat, Status, Items, Cost, Profile)|Rest]) :-
-        write('PLAN_START'), nl,
-        write('strategy='), write(Strat), nl,
-        write('status='), write(Status), nl,
-        write('cost='), write(Cost), nl,
-        Profile = profile(ApMin, FmMin, Risk, CW),
-        write('ap_min='), write(ApMin), nl,
-        write('fm_min='), write(FmMin), nl,
-        write('risk='), write(Risk), nl,
-        write('cw='), write(CW), nl,
-        write_items(Items),
-        write('PLAN_END'), nl,
-        write_plans(Rest).
-
-    write_items([]).
-    write_items([item(Id, Pct, Cost)|Rest]) :-
-        write('item '), write(Id), write(' '), write(Pct), write(' '), write(Cost), nl,
-        write_items(Rest).
-  PL
-
-  Dir.mktmpdir('bridge-') do |dir|
-    pl_file = File.join(dir, 'query.pl')
-    File.write(pl_file, prolog_src)
     stdout, stderr, status = Open3.capture3('scryer-prolog', pl_file)
-    (stdout + stderr).lines.reject { |l| l.start_with?('% Warning') }.join
+    raw = stdout + stderr
+    # Filter scryer warnings
+    raw.lines.reject { |l| l.start_with?('% Warning') || l.start_with?('% ') }.join
   end
 end
 
 # ═══════════════════════════════════════════════════════════════
-# Step 2: Prolog meta (nutrition + constraints + ingredient DB)
+# Parsers (unchanged from v2.0 — compatible with unified output)
 # ═══════════════════════════════════════════════════════════════
-
-def run_prolog_meta
-  prolog_src = <<~PL
-    :- initialization(main).
-    base('#{RULES_DIR}/').
-
-    main :-
-        base(B),
-        atom_concat(B, 'ingredient_db.pl', P1), consult(P1),
-        atom_concat(B, 'species_nutrition.pl', P2), consult(P2),
-        atom_concat(B, 'category_rules.pl', P3), consult(P3),
-
-        species_nutrition(#{SPECIES_KEY}, #{STAGE}, Pro, Fat, Fib, Ash),
-        write('nutrition '), write(Pro), write(' '), write(Fat), write(' '), write(Fib), write(' '), write(Ash), nl,
-
-        species_category_constraints(#{SPECIES_KEY}, #{STAGE}, Cats),
-        write_cats(Cats),
-
-        findall(Id-Cn-Cat-Pro2-Fat2-Fib2-Ash2-Price-Max-Min,
-            ingredient(Id, Cn, Cat, Pro2, Fat2, Fib2, Ash2, _, Price, Max, Min),
-            All),
-        write('INGREDIENTS_START'), nl,
-        write_ingredients(All),
-        write('INGREDIENTS_END'), nl,
-        halt.
-
-    write_ingredients([]).
-    write_ingredients([Id-Cn-Cat-Pro2-Fat2-Fib2-Ash2-Price-Max-Min|Rest]) :-
-        write('ing '), write(Id), write('|'), write(Cn), write('|'), write(Cat),
-        write('|'), write(Pro2), write('|'), write(Fat2), write('|'), write(Fib2),
-        write('|'), write(Ash2), write('|'), write(Price), write('|'), write(Max), write('|'), write(Min), nl,
-        write_ingredients(Rest).
-
-    write_cats([]).
-    write_cats([Cat-LT-Val|Rest]) :-
-        write('cat '), write(Cat), write(' '), write(LT), write(' '), write(Val), nl,
-        write_cats(Rest).
-  PL
-
-  Dir.mktmpdir('bridge-meta-') do |dir|
-    pl_file = File.join(dir, 'meta.pl')
-    File.write(pl_file, prolog_src)
-    stdout, stderr, status = Open3.capture3('scryer-prolog', pl_file)
-    (stdout + stderr).lines.reject { |l| l.start_with?('% Warning') }.join
-  end
-end
-
-# ═══════════════════════════════════════════════════════════════
-# Step 3: Prolog validation (nutrients + mineral + amino + risk)
-# ═══════════════════════════════════════════════════════════════
-
-def run_prolog_validation
-  prolog_src = <<~PL
-    :- initialization(main).
-    base('#{RULES_DIR}/').
-
-    main :-
-        base(B),
-        consult_all(B, [
-            ingredient_db, species_nutrition, category_rules,
-            ingredient_amino, mineral_balance, eaa_balance,
-            performance_risk_rules,
-            formulation_lp_engine, recipe_planner
-        ]),
-        generate_recipe_plans(#{SPECIES_KEY}, #{STAGE}, Out),
-        Out = output(Plans, _, _, _, _),
-        validate_plans(Plans),
-        halt.
-
-    consult_all(_, []).
-    consult_all(Base, [Name|Rest]) :-
-        atom_concat(Base, Name, P0),
-        atom_concat(P0, '.pl', Path),
-        consult(Path),
-        consult_all(Base, Rest).
-
-    % ═══ Plan validation ═══
-
-    validate_plans([]).
-    validate_plans([plan(Strat, _, ItemsItem3, _, _)|Rest]) :-
-        write('VAL_START '), write(Strat), nl,
-
-        % Convert item(Id,Pct,Cost) → Id-Pct-Cost for validators
-        items_to_pairs(ItemsItem3, Items),
-
-        % --- Actual nutrition ---
-        calc_nutrition(ItemsItem3, Pro, Fat, Fib, Ash),
-        ProR is round(Pro * 10) / 10,
-        FatR is round(Fat * 10) / 10,
-        FibR is round(Fib * 10) / 10,
-        AshR is round(Ash * 10) / 10,
-        write('  actual_nutrition '), write(ProR), write(' '), write(FatR),
-        write(' '), write(FibR), write(' '), write(AshR), nl,
-
-        % --- Mineral check ---
-        ( catch(once(mineral_check(#{SPECIES_KEY}, #{STAGE}, Items, MOut)),
-                Err, (write('  mineral_error '), write(Err), nl,
-                      MOut = output(data([]),[err(error,_)],[],0.0,[]))) ->
-            true
-        ;   MOut = output(data([]),[err(error,_)],[],0.0,[])
-        ),
-        write_mineral_out(MOut),
-
-        % --- Amino acid check ---
-        ( catch(once(eaa_check(#{SPECIES_KEY}, #{STAGE}, Items, AOut)),
-                _, (AOut = output(data([]),[err(error,_)],[],0.0,[]))) ->
-            true ; AOut = output(data([]),[err(error,_)],[],0.0,[])
-        ),
-        write_amino_out(AOut),
-
-        % --- Performance risk ---
-        ( catch(performance_risk_check(#{SPECIES_KEY}, #{STAGE}, Items, ROut),
-                Err, (write('  * risk_EXCEPTION '), write(Err), nl,
-                      ROut = output(data([]),[err(error,_)],[],0.0,[]))) ->
-            true ; ROut = output(data([]),[err(error,_)],[],0.0,[])
-        ),
-        write_risk_out(ROut),
-
-        write('VAL_END'), nl,
-        validate_plans(Rest).
-
-    % --- Format conversion: item/3 → -/3 ---
-    items_to_pairs([], []).
-    items_to_pairs([item(Id, Pct, Cost)|T], [Id-Pct-Cost|RT]) :-
-        items_to_pairs(T, RT).
-
-    % --- Nutrition calculator ---
-    calc_nutrition([], 0, 0, 0, 0).
-    calc_nutrition([item(_, 0, _)|T], P, F, B, A) :-
-        !, calc_nutrition(T, P, F, B, A).
-    calc_nutrition([item(Id, Pct, _)|T], Pro, Fat, Fib, Ash) :-
-        ingredient(Id, _, _, IngPro, IngFat, IngFib, IngAsh, _, _, _, _),
-        calc_nutrition(T, PR, FR, BR, AR),
-        Pro  is PR  + Pct * IngPro / 100,
-        Fat  is FR  + Pct * IngFat / 100,
-        Fib  is BR  + Pct * IngFib / 100,
-        Ash  is AR  + Pct * IngAsh / 100.
-
-    % --- Mineral output (handles variable-arity check terms) ---
-    write_mineral_out(output(data(Checks), _Ws, _Es, Conf, _)) :-
-        write('  mineral_confidence '), write(Conf), nl,
-        write_checks_mineral(Checks).
-
-    write_checks_mineral([]).
-    write_checks_mineral([C|T]) :-
-        C =.. [check|Args],
-        write_mineral_check(Args),
-        write_checks_mineral(T).
-
-    % available_phosphorus: check(Name, Status, Actual, Required) — 4 args
-    write_mineral_check([Name, Status, Actual, Required]) :-
-        write('  mineral_check '), write(Name), write(' '),
-        write(Status), write(' '), write(Actual), write(' '), write(Required), nl.
-    % ca_p_ratio passed: check(Name, Status, Ratio, Min, Max) — 5 args
-    write_mineral_check([ca_p_ratio, Status, Ratio, Min, Max]) :-
-        write('  mineral_check ca_p_ratio '), write(Status),
-        write(' '), write(Ratio), write(' '), write(Min), write('-'), write(Max), nl.
-    % ca_p_ratio failed: check(Name, Status, Ratio, Min, Max, Dir) — 6 args
-    write_mineral_check([ca_p_ratio, Status, Ratio, Min, Max, _Dir]) :-
-        write('  mineral_check ca_p_ratio '), write(Status),
-        write(' '), write(Ratio), write(' '), write(Min), write('-'), write(Max), nl.
-
-    % --- Amino acid output ---
-    write_amino_out(output(data(Checks), _Ws, _Es, Conf, _)) :-
-        write('  amino_confidence '), write(Conf), nl,
-        write_checks_amino(Checks).
-
-    write_checks_amino([]).
-    write_checks_amino([C|T]) :-
-        C =.. [check, Name, Status, Actual, Required|_],
-        write('  amino_check '), write(Name), write(' '),
-        write(Status), write(' '), write(Actual), write(' '), write(Required), nl,
-        write_checks_amino(T).
-
-    % --- Performance risk output ---
-    write_risk_out(output(data(Checks), _Ws, _Es, Conf, _)) :-
-        write('  risk_confidence '), write(Conf), nl,
-        write_checks_risk(Checks).
-
-    write_checks_risk([]).
-    write_checks_risk([C|T]) :-
-        C =.. [risk, Name, Level, Value],
-        write('  risk_check '), write(Name), write(' '),
-        write(Level), write(' '), write(Value), nl,
-        write_checks_risk(T).
-  PL
-
-  Dir.mktmpdir('bridge-val-') do |dir|
-    pl_file = File.join(dir, 'validate.pl')
-    File.write(pl_file, prolog_src)
-    stdout, stderr, status = Open3.capture3('scryer-prolog', pl_file)
-    (stdout + stderr).lines.reject { |l| l.start_with?('% Warning') }.join
-  end
-end
-
-# ═══════════════════════════════════════════════════════════════
-# Parsing
-# ═══════════════════════════════════════════════════════════════
-
-def parse_ingredient_db
-  db_file = File.join(RULES_DIR, 'ingredient_db.pl')
-  ingredients = {}
-  File.readlines(db_file).each do |line|
-    if line =~ /^ingredient\((\w+),\s*'([^']+)',\s*(\w+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*[\d.]*,\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\)/
-      ingredients[$1] = {
-        cn: $2, category: $3,
-        pro: $4.to_f, fat: $5.to_f, fib: $6.to_f, ash: $7.to_f,
-        price: $8.to_f, max_usage: $9.to_f, min_usage: $10.to_f
-      }
-    end
-  end
-  ingredients
-end
 
 def parse_plans(raw)
   plans = []
@@ -366,7 +134,7 @@ def parse_meta(raw)
 
   raw.each_line do |line|
     line = line.strip
-    next if line.empty?
+    next if line.empty? || line.start_with?('META_')  # Skip META_START/META_END headers
 
     case line
     when 'INGREDIENTS_START' then in_ingredients = true; next
@@ -381,9 +149,9 @@ def parse_meta(raw)
           price: $8.to_f, max_usage: $9.to_f, min_usage: $10.to_f
         }
       end
-    elsif line =~ /^nutrition (\S+) (\S+) (\S+) (\S+)/
+    elsif line =~ /^(?:NUTRITION|nutrition) ([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)/
       meta[:nutrition] = { 'protein' => $1.to_f, 'fat' => $2.to_f, 'fiber' => $3.to_f, 'ash' => $4.to_f }
-    elsif line =~ /^cat (\S+) (min|max) ([\d.]+)/
+    elsif line =~ /^(?:CONSTRAINT|cat) (\S+) (min|max) ([\d.]+)/
       cat_key = $1
       op = $2
       val = $3.to_f
@@ -418,25 +186,29 @@ def parse_validation(raw)
     when 'VAL_END'
       validations[current_strat] = current_val if current_strat
       current_strat = nil; current_val = nil
-    when /^\s+actual_nutrition ([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)/
+    when /^actual_nutrition ([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)/
       current_val['actual_nutrition'] = {
         'protein' => $1.to_f, 'fat' => $2.to_f, 'fiber' => $3.to_f, 'ash' => $4.to_f
       }
-    when /^\s+mineral_confidence ([\d.]+)/
+    when /^mineral_confidence ([\d.]+)/
       current_val['mineral']['confidence'] = $1.to_f
-    when /^\s+mineral_check (\S+) (\S+) ([\d.]+) ([\d.]+)/
+    when /^mineral_check ca_p_ratio (\S+) ([\d.]+) ([\d.]+)-([\d.]+)/
+      current_val['mineral']['checks'] << {
+        'name' => 'ca_p_ratio', 'status' => $1, 'actual' => $2.to_f, 'min' => $3.to_f, 'max' => $4.to_f
+      }
+    when /^mineral_check (\S+) (\S+) ([\d.]+) ([\d.]+)/
       current_val['mineral']['checks'] << {
         'name' => $1, 'status' => $2, 'actual' => $3.to_f, 'required' => $4.to_f
       }
-    when /^\s+amino_confidence ([\d.]+)/
+    when /^amino_confidence ([\d.]+)/
       current_val['amino']['confidence'] = $1.to_f
-    when /^\s+amino_check (\S+) (\S+) ([\d.]+) ([\d.]+)/
+    when /^amino_check (\S+) (\S+) ([\d.]+) ([\d.]+)/
       current_val['amino']['checks'] << {
         'name' => $1, 'status' => $2, 'actual' => $3.to_f, 'required' => $4.to_f
       }
-    when /^\s+risk_confidence ([\d.]+)/
+    when /^risk_confidence ([\d.]+)/
       current_val['risk']['confidence'] = $1.to_f
-    when /^\s+risk_check (\S+) (\S+) (.+)$/
+    when /^risk_check (\S+) (\S+) (.+)$/
       current_val['risk']['checks'] << {
         'name' => $1, 'level' => $2, 'value' => $3.strip
       }
@@ -446,7 +218,7 @@ def parse_validation(raw)
 end
 
 # ═══════════════════════════════════════════════════════════════
-# Additives (shrimp-specific micronutrients)
+# Additives (shrimp-specific micronutrients) — unchanged
 # ═══════════════════════════════════════════════════════════════
 
 def load_additives
@@ -462,7 +234,6 @@ def inject_additives(items, species_key, stage, ingredient_meta)
   species_additives = additives_config.dig(species_key, stage) || []
   return items if species_additives.empty?
 
-  # Collect additive items to append
   additive_items = species_additives.map do |add|
     ing = ingredient_meta[add['id']] || {}
     {
@@ -475,7 +246,6 @@ def inject_additives(items, species_key, stage, ingredient_meta)
     }
   end
 
-  # Calculate total additive pct and deduct from bulk ingredients proportionally
   total_add = additive_items.sum { |a| a['pct'] }
   bulk_items = items.reject { |i| additive_items.any? { |a| a['id'] == i['id'] } }
   bulk_pct = bulk_items.sum { |i| i['pct'] }
@@ -489,7 +259,7 @@ def inject_additives(items, species_key, stage, ingredient_meta)
 end
 
 # ═══════════════════════════════════════════════════════════════
-# Assemble final JSON
+# Assemble final JSON — unchanged
 # ═══════════════════════════════════════════════════════════════
 
 def calculate_closure(items)
@@ -518,14 +288,10 @@ def assemble_json(plans, meta, validations, ingredient_meta)
       }
     end
 
-    # Inject micronutrient additives
     items = inject_additives(raw_items, SPECIES_KEY, STAGE, ingredient_meta)
-
-    # Validation data
     val = validations[p['strategy']] || {}
     actual = val['actual_nutrition'] || {}
 
-    # Category aggregations
     animal_pct = items.select { |i|
       cat = ingredient_meta[i['id']]&.dig(:category)
       cat == 'animal_protein'
@@ -549,12 +315,10 @@ def assemble_json(plans, meta, validations, ingredient_meta)
       'strategy'            => strat[:desc],
       'cost'                => (p['cost'] * 100).round,
       'cost_raw'            => p['cost'],
-      # Target nutrition (from species requirement)
       'protein_target'      => meta[:nutrition]['protein'],
       'fat_target'          => meta[:nutrition]['fat'],
       'fiber_target'        => meta[:nutrition]['fiber'],
       'ash_target'          => meta[:nutrition]['ash'],
-      # Actual nutrition (calculated from items)
       'protein_actual'      => actual['protein'] || 0,
       'fat_actual'          => actual['fat'] || 0,
       'fiber_actual'        => actual['fiber'] || 0,
@@ -573,7 +337,6 @@ def assemble_json(plans, meta, validations, ingredient_meta)
     }
   end
 
-  # Build species description
   species_desc = case SPECIES_KEY
   when 'white_shrimp'
     "#{species_cn} (Litopenaeus vannamei) 是全球养殖产量最高的对虾品种。#{stage_cn}阶段体重通常在 15g 以上，对蛋白质需求较幼虾阶段有所降低，但对饲料水中稳定性和诱食性要求较高。"
@@ -585,17 +348,17 @@ def assemble_json(plans, meta, validations, ingredient_meta)
 
   {
     'meta' => {
-      'species'       => species_cn,
-      'stage'         => stage_cn,
-      'species_key'   => SPECIES_KEY,
-      'stage_key'     => STAGE,
-      'generated_at'  => generated_at,
+      'species'        => species_cn,
+      'stage'          => stage_cn,
+      'species_key'    => SPECIES_KEY,
+      'stage_key'      => STAGE,
+      'generated_at'   => generated_at,
       'price_baseline' => PRICE_BASELINE,
-      'version'       => 'AquaFeedFormulator v2.1',
-      'engine'        => 'Prolog LP solver + SOP Gatekeeper',
-      'data_sources'  => DATA_SOURCES,
-      'species_desc'  => species_desc,
-      'disclaimer'    => '本配方由 LP 求解器在营养约束条件下优化生成，矿物质/氨基酸/绩效风险校验已通过 Prolog 规则引擎自动执行。实际使用前建议进行小规模养殖试验验证。'
+      'version'        => 'AquaFeedFormulator v3.0',
+      'engine'         => 'Prolog SOP Orchestrator (Unified Pipeline)',
+      'data_sources'   => DATA_SOURCES,
+      'species_desc'   => species_desc,
+      'disclaimer'     => '本配方由 LP 求解器在营养约束条件下优化生成，矿物质/氨基酸/绩效风险校验已通过 Prolog 规则引擎自动执行。实际使用前建议进行小规模养殖试验验证。'
     },
     'nutrition'    => meta[:nutrition],
     'constraints'  => meta[:constraints],
@@ -604,56 +367,45 @@ def assemble_json(plans, meta, validations, ingredient_meta)
 end
 
 # ═══════════════════════════════════════════════════════════════
-# Main
+# Main (v3.0 — unified single Prolog call)
 # ═══════════════════════════════════════════════════════════════
 
-puts '=== AquaFeedFormulator Bridge: Prolog → DOCX v2.0 ==='
+puts '=== AquaFeedFormulator Bridge: Prolog → DOCX v3.0 (Unified) ==='
 puts "Species: #{SPECIES_KEY} | Stage: #{STAGE}"
 puts
 
-puts '[1/4] 运行 Prolog recipe_planner (三策略)...'
-plans_raw = run_prolog_plans
-plans = parse_plans(plans_raw)
-puts "  获取 #{plans.length} 套方案"
+puts '[1/2] 运行统一 Prolog Pipeline (食谱+营养+约束+校验)...'
+raw = run_unified_prolog
 
-puts '[2/4] 查询营养需求 + 原料数据库...'
-meta_raw = run_prolog_meta
-meta = parse_meta(meta_raw)
-# DEBUG
+# Parse all sections from single output
+plans = parse_plans(raw)
+puts "  方案: #{plans.length} 套"
+
+meta = parse_meta(raw)
 ing_count = meta[:ingredients]&.length || 0
-puts "  DEBUG: raw meta has #{meta_raw.lines.count} lines, ingredients parsed: #{ing_count}"
-if ing_count < 10
-  puts "  DEBUG raw (first 500 chars):"
-  puts meta_raw[0..500]
-end
 puts "  营养: 蛋白≥#{meta[:nutrition]['protein']}% 脂肪≥#{meta[:nutrition]['fat']}%"
 puts "  品类约束: #{meta[:constraints].length} 项"
 puts "  原料库: #{ing_count} 种"
 
-puts '[3/4] 运行 Prolog SOP 校验 (矿物质/氨基酸/绩效风险)...'
-val_raw = run_prolog_validation
-puts "  [DEBUG] val_raw (#{val_raw.lines.count} lines):"
-val_raw.each_line { |l| puts "    > #{l.chomp}" }
-puts "-" * 40
-validations = parse_validation(val_raw)
-puts "  parsed #{validations.keys.size} validation entries"
+validations = parse_validation(raw)
+puts "  SOP校验: #{validations.keys.size} 套方案"
 validations.each do |strat, val|
   actual = val['actual_nutrition']
   mineral_ok = val.dig('mineral', 'checks')&.all? { |c| c['status'] == 'passed' }
-  amino_ok = val.dig('amino', 'checks')&.all? { |c| c['status'] == 'passed' }
-  mineral_ok_str = mineral_ok.nil? ? '⊘' : (mineral_ok ? '✅' : '❌')
-  amino_ok_str = amino_ok.nil? ? '⊘' : (amino_ok ? '✅' : '❌')
-  puts "  #{strat}: 蛋白=#{actual['protein']}% 脂肪=#{actual['fat']}% 矿物=#{mineral_ok_str} 氨基酸=#{amino_ok_str} 置信度=#{(val.dig('risk', 'confidence') || 0 * 100).round}%"
+  amino_ok = val.dig('amino', 'checks')&.all? { |c| c['status'] == 'met' }
+  mineral_str = mineral_ok.nil? ? '⊘' : (mineral_ok ? '✅' : '❌')
+  amino_str = amino_ok.nil? ? '⊘' : (amino_ok ? '✅' : '❌')
+  conf = ((val.dig('risk', 'confidence') || 0) * 100).round
+  puts "    #{strat}: 蛋白=#{actual['protein']}% 矿物=#{mineral_str} 氨基酸=#{amino_str} 置信度=#{conf}%"
 end
 
-puts '[4/4] 生成 recipe_data.json...'
+puts
+puts '[2/2] 生成 recipe_data.json + DOCX 报告...'
 json_data = assemble_json(plans, meta, validations, meta[:ingredients])
 FileUtils.mkdir_p(File.dirname(OUTPUT_JSON))
 File.write(OUTPUT_JSON, JSON.pretty_generate(json_data))
 puts "  ✅ #{OUTPUT_JSON}"
 
-puts
-puts '运行 DOCX 报告生成...'
 result = system('python3', File.join(PROJECT_DIR, 'generate_report.py'), OUTPUT_JSON)
 if result
   docx_file = Dir.glob(File.join(DOCX_OUTPUT, '*饲料配方报告*.docx')).max_by { |f| File.mtime(f) }
